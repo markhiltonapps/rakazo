@@ -77,6 +77,25 @@ export function safeProxyHeaders(headers: IncomingHttpHeaders) {
   );
 }
 
+/** Status line and body text of a refused screen handshake, so the log carries the upstream reason. */
+export function handshakeFailurePreview(sanitizedResponse: Buffer, limit = 400) {
+  const reply = sanitizedResponse.toString("latin1");
+  const headerEnd = reply.indexOf("\r\n\r\n");
+  const status = reply.slice(0, reply.indexOf("\r\n"));
+  const body =
+    headerEnd < 0
+      ? ""
+      : reply
+          .slice(headerEnd + 4)
+          .replace(/<(style|script)\b[\s\S]*?<\/\1>/gi, " ")
+          .replace(/<[^>]*>/g, " ");
+  return `${status} | ${body}`
+    .replace(/[^\x20-\x7e]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, limit);
+}
+
 /** Recheck streams as well as new requests; no positive authorization cache. */
 export function watchScreenAuthorization(check: () => Promise<boolean>, revoke: () => void) {
   let stopped = false;

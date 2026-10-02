@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { resolveNovncTarget, safeProxyHeaders, watchScreenAuthorization } from "./screen-proxy.js";
+import {
+  handshakeFailurePreview,
+  resolveNovncTarget,
+  safeProxyHeaders,
+  watchScreenAuthorization,
+} from "./screen-proxy.js";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -143,5 +148,21 @@ describe("screen proxy", () => {
         "sec-websocket-key": "key",
       }),
     ).toEqual({ upgrade: "websocket", "sec-websocket-key": "key" });
+  });
+
+  it("previews a refused handshake as its status and body text", () => {
+    const response = Buffer.from(
+      "HTTP/1.1 502 Bad Gateway\r\ncontent-type: text/html\r\n\r\n" +
+        "<html><head><style>body { color: red }</style></head>" +
+        "<body><h1>Closed port</h1>\n<p>port is not open</p>\x00\x07</body></html>",
+      "latin1",
+    );
+    expect(handshakeFailurePreview(response)).toBe(
+      "HTTP/1.1 502 Bad Gateway | Closed port port is not open",
+    );
+    expect(handshakeFailurePreview(response, 8)).toBe("HTTP/1.1");
+    expect(handshakeFailurePreview(Buffer.from("HTTP/1.1 502 Bad Gateway\r\n"))).toBe(
+      "HTTP/1.1 502 Bad Gateway |",
+    );
   });
 });

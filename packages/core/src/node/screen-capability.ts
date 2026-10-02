@@ -62,16 +62,24 @@ export function sealScreenCapability(
   ]);
   const token = Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString("base64url");
   const prefix = `/novnc/session/${policy}/${expiresAt}.${token}`;
-  const result = new URL(`${prefix}${target.pathname || "/"}`, new URL(origin).origin);
+  const page = new URL(origin);
+  const result = new URL(`${prefix}${target.pathname || "/"}`, page.origin);
   // noVNC reads these from the browser URL. Keep its socket inside the capability
   // route while the provider's nested socket token stays sealed server-side.
   result.search = new URLSearchParams({
     autoconnect: "true",
     resize: "scale",
     view_only: policy === "control" ? "false" : "true",
-    // Our embed resolves the socket relative to its own capability directory;
-    // stock noVNC resolves it from the origin root.
-    path: target.pathname === "/embed.html" ? "websockify" : `${prefix.slice(1)}/websockify`,
+    // Our embed resolves the socket relative to its own capability directory. Stock noVNC
+    // before 1.5 resolves it from the origin root; later releases resolve it from the
+    // page's directory unless a host is set, so name this page's own host and port.
+    ...(target.pathname === "/embed.html"
+      ? { path: "websockify" }
+      : {
+          host: page.hostname,
+          port: page.port || (page.protocol === "https:" ? "443" : "80"),
+          path: `${prefix.slice(1)}/websockify`,
+        }),
   }).toString();
   return result.toString();
 }
