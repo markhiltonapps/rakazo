@@ -3,6 +3,7 @@ import {
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_NAME_MAX_LENGTH,
   BOT_TITLE_MAX_LENGTH,
+  botDescriptionPatch,
   type ComputerMode,
   normalizeCreateBotProfile,
   type ThinkingLevel,
@@ -244,14 +245,9 @@ export default function BotSettingsScreen() {
         modelId?: string | null;
         thinkingLevel?: ThinkingLevel | null;
         autoSpeak?: boolean;
-      } = { botId };
+      } = { botId, ...botDescriptionPatch(bot.description ?? "", description) };
       if (profile.name !== bot.name) input.name = profile.name;
       if (profile.title !== bot.title) input.title = profile.title;
-      if (profile.description !== (bot.description ?? "")) {
-        input.description = profile.description;
-        // Keep instructions in sync with description (same as web BotSettings).
-        input.instructions = profile.instructions;
-      }
       if (color !== bot.color) input.color = color;
       const modelChanged =
         (selected?.provider ?? null) !== (bot.modelProvider ?? null) ||

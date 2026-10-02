@@ -313,6 +313,23 @@ export function normalizeCreateBotProfile(
   };
 }
 
+/**
+ * Settings edit a bot's instructions through its description. Send both only when the
+ * description changed: a bot another bot created keeps instructions that never appear in
+ * that field, and saving any other setting would erase them.
+ */
+export function botDescriptionPatch(
+  currentDescription: string,
+  nextDescription: string,
+): { description?: string; instructions?: string } {
+  const description = nextDescription.trim();
+  if (description === currentDescription.trim()) return {};
+  return {
+    description: description.slice(0, BOT_DESCRIPTION_MAX_LENGTH),
+    instructions: description.slice(0, BOT_INSTRUCTIONS_MAX_LENGTH),
+  };
+}
+
 export const UpdateBotInput = z
   .object({
     botId: Id,

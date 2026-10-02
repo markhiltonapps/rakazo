@@ -13,6 +13,7 @@ import {
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_NAME_MAX_LENGTH,
   BOT_TITLE_MAX_LENGTH,
+  botDescriptionPatch,
 } from "@rakazo/contracts";
 import {
   Button,
@@ -354,8 +355,7 @@ export function BotSettings({
       await onSave({
         name: nextName || bot.name,
         title: nextTitle,
-        description: nextDescription,
-        instructions: nextDescription,
+        ...botDescriptionPatch(bot.description, nextDescription),
         // Unchanged color stays off the wire so a legacy named value cannot fail a name save.
         ...(nextColor !== bot.color ? { color: nextColor } : {}),
         notifyOnFinish: nextNotify,

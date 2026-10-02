@@ -4,6 +4,7 @@ import {
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_INSTRUCTIONS_MAX_LENGTH,
   BOT_TITLE_MAX_LENGTH,
+  botDescriptionPatch,
   CreateBotInput,
   CreateGroupInput,
   CreateRoutineInput,
@@ -158,6 +159,19 @@ describe("contracts", () => {
     expect(profile.title).toHaveLength(BOT_TITLE_MAX_LENGTH);
     expect(profile.description).toHaveLength(BOT_DESCRIPTION_MAX_LENGTH);
     expect(profile.instructions).toHaveLength(BOT_INSTRUCTIONS_MAX_LENGTH);
+  });
+
+  it("leaves instructions alone unless the description changed", () => {
+    // A bot created by another bot has instructions but no description.
+    expect(botDescriptionPatch("", "")).toEqual({});
+    expect(botDescriptionPatch("Writes copy", "  Writes copy  ")).toEqual({});
+    expect(botDescriptionPatch("", "Plans the week")).toEqual({
+      description: "Plans the week",
+      instructions: "Plans the week",
+    });
+    const patch = botDescriptionPatch("", "D".repeat(BOT_INSTRUCTIONS_MAX_LENGTH + 10));
+    expect(patch.description).toHaveLength(BOT_DESCRIPTION_MAX_LENGTH);
+    expect(patch.instructions).toHaveLength(BOT_INSTRUCTIONS_MAX_LENGTH);
   });
 
   it("accepts the same title limit when creating and updating bots", () => {
