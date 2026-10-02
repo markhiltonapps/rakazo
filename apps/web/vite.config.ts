@@ -20,6 +20,7 @@ import { resolveScreenProxySecret } from "../../packages/core/src/secrets-guard.
 import { createServiceLogger } from "../../packages/logging/src/env.ts";
 import { collectNovncHtml, MAX_NOVNC_HTML_BYTES } from "./src/novnc-html.js";
 import {
+  handshakeFailurePreview,
   resolveNovncTarget,
   safeProxyHeaders,
   watchScreenAuthorization,
@@ -332,6 +333,7 @@ function attachNovncProxy(server: ViteDevServer | PreviewServer, secret: string,
             ...bindings,
             reason: "upstream_status",
             "http.status": status,
+            "upstream.response": handshakeFailurePreview(safe),
           });
         } else {
           upgraded = true;
