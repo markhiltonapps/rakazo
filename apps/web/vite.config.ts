@@ -329,11 +329,19 @@ function attachNovncProxy(server: ViteDevServer | PreviewServer, secret: string,
             .match(/^HTTP\/1\.\d (\d{3})/)?.[1] ?? 0,
         );
         if (status !== 101) {
-          screenLog.warn("screen.proxy.websocket_handshake_failed", {
-            ...bindings,
-            reason: "upstream_status",
-            "http.status": status,
-            "upstream.response": handshakeFailurePreview(safe),
+          // The reason is in the reply body, which can trail the headers; log it once the
+          // upstream closes the refused connection.
+          let reply = safe;
+          upstream.on("data", (chunk: Buffer) => {
+            if (reply.length < 16 * 1024) reply = Buffer.concat([reply, chunk]);
+          });
+          upstream.once("close", () => {
+            screenLog.warn("screen.proxy.websocket_handshake_failed", {
+              ...bindings,
+              reason: "upstream_status",
+              "http.status": status,
+              "upstream.response": handshakeFailurePreview(reply),
+            });
           });
         } else {
           upgraded = true;
