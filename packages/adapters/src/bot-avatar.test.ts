@@ -1,3 +1,5 @@
+import { BOT_AVATAR_VALUE_MAX_LENGTH } from "@rakazo/contracts";
+import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import {
   attachedImageArtifactIds,
@@ -11,11 +13,50 @@ const PNG_1X1 = Buffer.from(
   "base64",
 );
 
+/** An animated GIF whose frames are seeded noise (incompressible) or flat colors. */
+async function animatedGif(frameCount: number, kind: "noise" | "flat"): Promise<Buffer> {
+  const size = 128;
+  const frames = await Promise.all(
+    Array.from({ length: frameCount }, (_, index) => {
+      const pixels = Buffer.alloc(size * size * 3);
+      let state = index + 1;
+      for (let offset = 0; offset < pixels.length; offset += 1) {
+        state = (state * 1103515245 + 12345) >>> 0;
+        pixels[offset] = kind === "noise" ? state >>> 24 : (index * 40 + offset) % 256;
+      }
+      return sharp(pixels, { raw: { width: size, height: size, channels: 3 } })
+        .png()
+        .toBuffer();
+    }),
+  );
+  return sharp(frames, { join: { animated: true } })
+    .gif()
+    .toBuffer();
+}
+
+async function decodedFrames(dataUrl: string) {
+  const bytes = Buffer.from(dataUrl.slice(dataUrl.indexOf(",") + 1), "base64");
+  const { pages = 1, width, pageHeight } = await sharp(bytes, { animated: true }).metadata();
+  return { pages, width, height: pageHeight };
+}
+
 describe("bot avatar encoding", () => {
   it("encodes an attached image as a square webp data URL", async () => {
     const dataUrl = await encodeBotAvatarImage(PNG_1X1);
     expect(dataUrl.startsWith("data:image/webp;base64,")).toBe(true);
     expect(dataUrl.length).toBeGreaterThan("data:image/webp;base64,".length);
+  });
+
+  it("keeps an animated GIF animated", async () => {
+    const dataUrl = await encodeBotAvatarImage(await animatedGif(6, "flat"));
+    expect(dataUrl.startsWith("data:image/webp;base64,")).toBe(true);
+    await expect(decodedFrames(dataUrl)).resolves.toEqual({ pages: 6, width: 256, height: 256 });
+  });
+
+  it("uses the first frame when no animated encoding fits", async () => {
+    const dataUrl = await encodeBotAvatarImage(await animatedGif(20, "noise"));
+    expect(dataUrl.length).toBeLessThanOrEqual(BOT_AVATAR_VALUE_MAX_LENGTH);
+    await expect(decodedFrames(dataUrl)).resolves.toMatchObject({ pages: 1, width: 256 });
   });
 
   it("lists attached image artifact ids in order", () => {

@@ -55,6 +55,7 @@ import {
   deploymentAutoReviewDefault,
   destroyBot,
   displayBotWorkspacePath,
+  encodeBotAvatarImage,
   enqueueTakeoverContinuation,
   expireComputerControl,
   forgetBotSecret,
@@ -1418,6 +1419,13 @@ export function createRouter(deps: RouterDeps) {
       reorder: authed.bots.reorder.handler(async ({ context, input }) => {
         await repos.reorderBots(context.actor, input.botIds);
         return { ok: true as const };
+      }),
+      encodeAvatar: authed.bots.encodeAvatar.handler(async ({ input }) => {
+        try {
+          return { color: await encodeBotAvatarImage(Buffer.from(input.contentBase64, "base64")) };
+        } catch {
+          throw new ORPCError("BAD_REQUEST", { message: "Could not use that image as an avatar." });
+        }
       }),
       update: authed.bots.update.handler(async ({ context, input }) => {
         const existing = await repos.getBot(context.actor, input.botId);

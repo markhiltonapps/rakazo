@@ -1,5 +1,6 @@
 import { t } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
+import { ATTACHMENT_MAX_BYTES } from "@rakazo/contracts";
 import {
   BotAvatar,
   DEFAULT_GROK_BOT_COLOR,
@@ -12,9 +13,15 @@ import {
   GROK_BOT_COLORS,
   GrokShapePreview,
   parseBotAvatar,
+  Spinner,
 } from "@rakazo/ui-web";
 import { Check, Pencil, Upload, X } from "lucide-react";
 import { type ClipboardEvent, type DragEvent, useRef, useState } from "react";
+import { readFileAsBase64 } from "../../lib/pending-attachments";
+import { rpc } from "../../lib/rpc";
+
+/** The server keeps these animated when the result fits an avatar. */
+const ANIMATABLE_IMAGE_TYPES = new Set(["image/gif", "image/webp"]);
 
 export interface AvatarStudioPopoverProps {
   value: string;
@@ -36,6 +43,7 @@ export function AvatarStudioPopover({
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"bot" | "upload">("bot");
   const [dragOver, setDragOver] = useState(false);
+  const [encoding, setEncoding] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const parsed = parseBotAvatar(value, identity);
@@ -55,7 +63,30 @@ export function AvatarStudioPopover({
   }
 
   function processImageFile(file: File) {
-    if (!file.type.startsWith("image/")) return;
+    if (!file.type.startsWith("image/") || encoding) return;
+    if (ANIMATABLE_IMAGE_TYPES.has(file.type) && file.size <= ATTACHMENT_MAX_BYTES) {
+      void encodeOnServer(file);
+      return;
+    }
+    drawStillAvatar(file);
+  }
+
+  async function encodeOnServer(file: File) {
+    setEncoding(true);
+    try {
+      const { color } = await rpc.bots.encodeAvatar({
+        contentBase64: await readFileAsBase64(file),
+      });
+      onChange(color);
+      setOpen(false);
+    } catch {
+      drawStillAvatar(file);
+    } finally {
+      setEncoding(false);
+    }
+  }
+
+  function drawStillAvatar(file: File) {
     const reader = new FileReader();
     reader.onload = (event) => {
       const src = event.target?.result as string;
@@ -237,6 +268,8 @@ export function AvatarStudioPopover({
             <button
               type="button"
               aria-label={t`Image upload area`}
+              aria-busy={encoding}
+              disabled={encoding}
               onDragOver={(event) => {
                 event.preventDefault();
                 setDragOver(true);
@@ -258,11 +291,12 @@ export function AvatarStudioPopover({
                 className="hidden"
                 onChange={(event) => {
                   const file = event.target.files?.[0];
+                  event.target.value = "";
                   if (file) processImageFile(file);
                 }}
               />
               <div className="mb-2 grid size-10 place-items-center rounded-full bg-secondary text-muted-foreground">
-                <Upload size={18} strokeWidth={1.8} />
+                {encoding ? <Spinner /> : <Upload size={18} strokeWidth={1.8} />}
               </div>
               <p className="text-[12.5px] font-medium text-muted-foreground">
                 <Trans>Drag, drop, or paste an image</Trans>
