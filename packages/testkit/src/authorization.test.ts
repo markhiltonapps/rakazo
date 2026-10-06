@@ -87,6 +87,9 @@ describeWithDatabase("API authorization and resource isolation", () => {
       ["bots/duplicate", { botId: "missing-bot" }],
       ["bots/update", { botId: "missing-bot", name: "Nope" }],
       ["bots/encodeAvatar", { contentBase64: "AA==" }],
+      ["avatarGallery/list"],
+      ["avatarGallery/add", { value: "data:image/webp;base64,AA==" }],
+      ["avatarGallery/remove", { id: "missing-item" }],
       ["bots/archive", { botId: "missing-bot" }],
       ["bots/restore", { botId: "missing-bot" }],
       ["bots/remove", { botId: "missing-bot" }],
@@ -1473,6 +1476,46 @@ describeWithDatabase("API authorization and resource isolation", () => {
       await rpc(app, owner, "deployment/update", {
         signupsEnabled: true,
         signupAllowlist: [],
+      });
+    }
+  });
+
+  it("lets only the deployment owner curate the shared avatar gallery", async () => {
+    type Gallery = { items: Array<{ id: string; value: string }>; canManage: boolean };
+    const owner = await signup(app, `gallery-owner-${stamp}@rakazo.test`, "Gallery Owner");
+    const member = await signup(app, `gallery-member-${stamp}@rakazo.test`, "Gallery Member");
+    const ownerActor = await rpc<Actor>(app, owner, "me");
+    const settings = await handles.prisma.deploymentSettings.findUniqueOrThrow({
+      where: { id: "default" },
+    });
+    await handles.prisma.deploymentSettings.update({
+      where: { id: "default" },
+      data: { ownerUserId: ownerActor.userId },
+    });
+    const value = `data:image/webp;base64,${Buffer.from(`gallery-${stamp}`).toString("base64")}`;
+
+    try {
+      await expectForbidden(app, member, "avatarGallery/add", { value });
+      const item = await rpc<{ id: string; value: string }>(app, owner, "avatarGallery/add", {
+        value,
+      });
+      expect(await rpc(app, owner, "avatarGallery/add", { value })).toEqual(item);
+      expect((await rpc<Gallery>(app, owner, "avatarGallery/list")).canManage).toBe(true);
+
+      const memberView = await rpc<Gallery>(app, member, "avatarGallery/list");
+      expect(memberView.canManage).toBe(false);
+      expect(memberView.items).toContainEqual(item);
+
+      await expectForbidden(app, member, "avatarGallery/remove", { id: item.id });
+      await rpc(app, owner, "avatarGallery/remove", { id: item.id });
+      expect((await rpc<Gallery>(app, member, "avatarGallery/list")).items).not.toContainEqual(
+        item,
+      );
+    } finally {
+      await handles.prisma.avatarGalleryItem.deleteMany({ where: { value } });
+      await handles.prisma.deploymentSettings.update({
+        where: { id: "default" },
+        data: { ownerUserId: settings.ownerUserId },
       });
     }
   });

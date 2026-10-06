@@ -7,7 +7,12 @@ import {
   ATTACHMENT_MAX_BASE64_LENGTH,
   ATTACHMENT_MAX_COUNT,
 } from "./attachments.js";
-import { BotAvatarValueSchema } from "./bot-avatar.js";
+import {
+  AvatarGalleryImageSchema,
+  AvatarGalleryItemSchema,
+  AvatarGallerySchema,
+  BotAvatarValueSchema,
+} from "./bot-avatar.js";
 import { BotSecretMetadata, BotSecretPutInput, StoredBotSecretName } from "./bot-secrets.js";
 import {
   ActionApprovalRuleSchema,
@@ -252,6 +257,11 @@ export const appContract = {
     disconnect: oc
       .input(z.object({ provider: z.string().trim().min(1) }))
       .output(z.object({ ok: z.literal(true) })),
+  },
+  avatarGallery: {
+    list: oc.output(AvatarGallerySchema),
+    add: oc.input(z.object({ value: AvatarGalleryImageSchema })).output(AvatarGalleryItemSchema),
+    remove: oc.input(z.object({ id: Id })).output(z.object({ ok: z.literal(true) })),
   },
   bots: {
     list: oc.output(z.array(BotSchema)),
