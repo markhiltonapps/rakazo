@@ -28,6 +28,7 @@ import type {
   MemoryProviderResolver,
   PiOAuthLogins,
   RemoteConnectorDependencies,
+  UsageBilling,
 } from "@rakazo/adapters";
 import {
   acquireComputerExecutionLease,
@@ -89,6 +90,7 @@ import {
   resolveBotWorkspaceCwd,
   resolveBotWorkspacePath,
   revokeScreenControl,
+  SUBSCRIPTION_SIGN_IN_PROVIDERS,
   sanitizeComposioError,
   savePushToken,
   scheduleComputerControlExpiry,
@@ -5346,7 +5348,7 @@ export function createRouter(deps: RouterDeps) {
           where: { userId: context.actor.userId },
           select: { spaceId: true },
         });
-        const [rows, prices] = await Promise.all([
+        const [rows, billing] = await Promise.all([
           deps.prisma.usageRecord.findMany({
             where: {
               spaceId: { in: memberships.map((membership) => membership.spaceId) },
@@ -5364,9 +5366,9 @@ export function createRouter(deps: RouterDeps) {
               cacheWriteTokens: true,
             },
           }),
-          customModelPrices(deps, context.actor),
+          usageBilling(deps, context.actor),
         ]);
-        return summarizeBotUsage(rows, prices);
+        return summarizeBotUsage(rows, billing);
       }),
       summary: authed.usage.summary.handler(async ({ context }) => {
         const result = await deps.prisma.usageRecord.aggregate({
@@ -6066,38 +6068,51 @@ function computerHostFor(
   return null;
 }
 
-/** Prices the user entered for their custom model connection, keyed by model id. */
-async function customModelPrices(
-  deps: RouterDeps,
-  actor: Actor,
-): Promise<Map<string, ModelPrices>> {
+/**
+ * How the user's own connections bill: prices entered for a custom model, and providers
+ * connected through a subscription sign-in rather than a pay-per-token key.
+ */
+async function usageBilling(deps: RouterDeps, actor: Actor): Promise<UsageBilling> {
   const credentials = await deps.prisma.userModelCredential.findMany({
-    where: { userId: actor.userId, provider: OPENAI_COMPATIBLE_PROVIDER_ID },
+    where: { userId: actor.userId },
     select: {
+      provider: true,
       secretId: true,
       preferences: { where: { userId: actor.userId }, select: { modelId: true } },
     },
   });
-  const prices = new Map<string, ModelPrices>();
+  const secrets = credentials.length
+    ? await deps.prisma.secret.findMany({
+        where: {
+          id: { in: credentials.map((credential) => credential.secretId) },
+          userId: actor.userId,
+          spaceId: null,
+        },
+        select: { id: true, ciphertext: true },
+      })
+    : [];
+  const ciphertextById = new Map(secrets.map((secret) => [secret.id, secret.ciphertext]));
+  const customPrices = new Map<string, ModelPrices>();
+  const subscriptionProviders = new Set<string>();
   for (const credential of credentials) {
-    const secret = await deps.prisma.secret.findFirst({
-      where: { id: credential.secretId, userId: actor.userId, spaceId: null },
-      select: { ciphertext: true },
-    });
-    if (!secret) continue;
+    const ciphertext = ciphertextById.get(credential.secretId);
+    if (!ciphertext) continue;
     let stored: ReturnType<typeof parseModelSecret>;
     try {
-      stored = parseModelSecret(deps.secrets.load(secret.ciphertext, credential.secretId));
+      stored = parseModelSecret(deps.secrets.load(ciphertext, credential.secretId));
     } catch {
       continue;
+    }
+    if (stored.kind === "oauth" && SUBSCRIPTION_SIGN_IN_PROVIDERS[credential.provider]) {
+      subscriptionProviders.add(credential.provider);
     }
     if (stored.kind !== "openai_compatible" || !stored.prices) continue;
     for (const preference of credential.preferences) {
       const modelId = usableModelId(preference.modelId);
-      if (modelId) prices.set(modelId, stored.prices);
+      if (modelId) customPrices.set(modelId, stored.prices);
     }
   }
-  return prices;
+  return { customPrices, subscriptionProviders };
 }
 
 async function persistModelCredential(

@@ -18,8 +18,15 @@ export type UsageRow = {
   cacheWriteTokens: number;
 };
 
-/** Prices a user entered for their custom connection, keyed by model id. */
-export type CustomModelPrices = ReadonlyMap<string, ModelPrices>;
+/** How the user's connections bill for usage. */
+export type UsageBilling = {
+  /** Prices entered for a custom connection, keyed by model id. */
+  customPrices: ReadonlyMap<string, ModelPrices>;
+  /** Providers connected through a subscription sign-in, which bill a flat fee, not per token. */
+  subscriptionProviders: ReadonlySet<string>;
+};
+
+type CustomModelPrices = UsageBilling["customPrices"];
 
 function pricedModel(row: UsageRow, customPrices: CustomModelPrices): Model<Api> | undefined {
   if (row.provider !== OPENAI_COMPATIBLE_PROVIDER_ID) {
@@ -54,25 +61,30 @@ export function usageCostUsd(row: UsageRow, customPrices: CustomModelPrices): nu
   }).total;
 }
 
-/** Total tokens and spend per bot. Rows without a bot are left out. */
-export function summarizeBotUsage(
-  rows: Iterable<UsageRow>,
-  customPrices: CustomModelPrices,
-): BotUsage[] {
+/**
+ * Total tokens and per-token spend per bot. Rows without a bot are left out. Usage on a
+ * subscription sign-in counts toward tokens only: the plan's flat fee is not per-token spend.
+ */
+export function summarizeBotUsage(rows: Iterable<UsageRow>, billing: UsageBilling): BotUsage[] {
   const byBot = new Map<string, BotUsage>();
   for (const row of rows) {
     if (!row.botId) continue;
     const tokens = row.inputTokens + row.outputTokens;
-    const cost = usageCostUsd(row, customPrices);
     const total = byBot.get(row.botId) ?? {
       botId: row.botId,
       tokens: 0,
       costUsd: 0,
       unpricedTokens: 0,
+      planTokens: 0,
     };
     total.tokens += tokens;
-    if (cost === undefined) total.unpricedTokens += tokens;
-    else total.costUsd += cost;
+    if (billing.subscriptionProviders.has(row.provider)) {
+      total.planTokens += tokens;
+    } else {
+      const cost = usageCostUsd(row, billing.customPrices);
+      if (cost === undefined) total.unpricedTokens += tokens;
+      else total.costUsd += cost;
+    }
     byBot.set(row.botId, total);
   }
   return [...byBot.values()];

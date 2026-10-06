@@ -31,8 +31,9 @@ export function useBotUsage(): ReadonlyMap<string, BotUsage> {
 }
 
 /**
- * Compact figures for the sidebar. Cost is null when none of the tokens could be priced, and
- * ends in "+" when some could not, so a partial total never reads as complete.
+ * Compact figures for the sidebar. Cost is per-token spend only: subscription usage is left
+ * out, and cost is null when no tokens were billed per token. It ends in "+" when some tokens
+ * could not be priced, so a partial total never reads as complete.
  */
 export function formatBotUsage(
   usage: BotUsage,
@@ -42,7 +43,7 @@ export function formatBotUsage(
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(usage.tokens);
-  if (usage.unpricedTokens >= usage.tokens) return { cost: null, tokens };
+  if (usage.unpricedTokens + usage.planTokens >= usage.tokens) return { cost: null, tokens };
   const dollars = (amount: number, digits: number) =>
     new Intl.NumberFormat(locale, {
       style: "currency",
