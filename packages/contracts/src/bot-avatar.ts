@@ -1,4 +1,5 @@
 import * as z from "zod";
+import { Id } from "./ids.js";
 
 /** Matches the eight shipped mascot shapes in `@rakazo/core`. */
 export const BOT_AVATAR_SHAPE_COUNT = 8;
@@ -46,3 +47,21 @@ export const BotAvatarValueSchema = z
   .min(1)
   .max(BOT_AVATAR_VALUE_MAX_LENGTH)
   .refine(isBotAvatarValue, { message: "Invalid bot avatar" });
+
+/** Most avatars a deployment's shared gallery holds. */
+export const AVATAR_GALLERY_MAX_ITEMS = 24;
+
+export const AvatarGalleryImageSchema = BotAvatarValueSchema.refine(
+  (value) => value.startsWith("data:image/"),
+  { message: "Gallery avatars must be images" },
+);
+
+export const AvatarGalleryItemSchema = z.object({ id: Id, value: z.string() });
+export type AvatarGalleryItem = z.infer<typeof AvatarGalleryItemSchema>;
+
+/** The shared gallery, and whether this member may add to or remove from it. */
+export const AvatarGallerySchema = z.object({
+  items: z.array(AvatarGalleryItemSchema),
+  canManage: z.boolean(),
+});
+export type AvatarGallery = z.infer<typeof AvatarGallerySchema>;

@@ -265,6 +265,16 @@ model DeploymentSettings {
   @@map("deployment_settings")
 }
 
+/// Avatars the deployment owner shares with every member in Avatar Studio.
+model AvatarGalleryItem {
+  id          String   @id @default(cuid())
+  value       String
+  valueSha256 String   @unique
+  createdAt   DateTime @default(now())
+
+  @@map("avatar_gallery_items")
+}
+
 model UserModelCredential {
   id          String                 @id @default(cuid())
   userId      String

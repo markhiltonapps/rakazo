@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
-import { ATTACHMENT_MAX_BYTES } from "@rakazo/contracts";
+import type { AvatarGallery } from "@rakazo/contracts";
+import { ATTACHMENT_MAX_BYTES, AVATAR_GALLERY_MAX_ITEMS } from "@rakazo/contracts";
 import {
   BotAvatar,
   DEFAULT_GROK_BOT_COLOR,
@@ -15,8 +16,8 @@ import {
   parseBotAvatar,
   Spinner,
 } from "@rakazo/ui-web";
-import { Check, Pencil, Upload, X } from "lucide-react";
-import { type ClipboardEvent, type DragEvent, useRef, useState } from "react";
+import { Check, Pencil, Plus, Upload, X } from "lucide-react";
+import { type ClipboardEvent, type DragEvent, useEffect, useRef, useState } from "react";
 import { readFileAsBase64 } from "../../lib/pending-attachments";
 import { rpc } from "../../lib/rpc";
 
@@ -44,11 +45,51 @@ export function AvatarStudioPopover({
   const [activeTab, setActiveTab] = useState<"bot" | "upload">("bot");
   const [dragOver, setDragOver] = useState(false);
   const [encoding, setEncoding] = useState(false);
+  const [gallery, setGallery] = useState<AvatarGallery | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const parsed = parseBotAvatar(value, identity);
   const currentColor = parsed.color || DEFAULT_GROK_BOT_COLOR;
   const currentShape = parsed.shapeIndex ?? 0;
+  const canAddToGallery =
+    gallery?.canManage === true &&
+    parsed.isImage &&
+    gallery.items.length < AVATAR_GALLERY_MAX_ITEMS &&
+    !gallery.items.some((item) => item.value === value);
+  const showGallery = Boolean(gallery?.items.length) || canAddToGallery;
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    rpc.avatarGallery
+      .list()
+      .then((next) => {
+        if (!cancelled) setGallery(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  async function addToGallery() {
+    const item = await rpc.avatarGallery.add({ value }).catch(() => null);
+    if (!item) return;
+    setGallery((current) =>
+      current
+        ? { ...current, items: [...current.items.filter(({ id }) => id !== item.id), item] }
+        : current,
+    );
+  }
+
+  async function removeFromGallery(id: string) {
+    setGallery((current) =>
+      current ? { ...current, items: current.items.filter((item) => item.id !== id) } : current,
+    );
+    await rpc.avatarGallery.remove({ id }).catch(async () => {
+      setGallery(await rpc.avatarGallery.list().catch(() => null));
+    });
+  }
 
   function selectShape(shapeIndex: number) {
     onChange(`${currentColor}::shape_${shapeIndex}`);
@@ -220,7 +261,58 @@ export function AvatarStudioPopover({
 
           {activeTab === "bot" ? (
             <div className="space-y-4 pt-1" data-testid="avatar-studio-bot-tab">
-              <div>
+              {gallery && showGallery ? (
+                <div data-testid="avatar-gallery">
+                  <div className="mb-2 text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
+                    <Trans>Gallery</Trans>
+                  </div>
+                  <div className="grid grid-cols-4 place-items-center gap-2">
+                    {gallery.items.map((item, index) => {
+                      const position = index + 1;
+                      const selected = item.value === value;
+                      return (
+                        <div key={item.id} className="group/gallery relative">
+                          <button
+                            type="button"
+                            onClick={() => onChange(item.value)}
+                            aria-label={t`Gallery avatar ${position}`}
+                            aria-pressed={selected}
+                            className={`block size-10 overflow-hidden rounded-full transition-transform hover:scale-110 active:scale-95 focus-visible:ring-2 focus-visible:ring-ring ${
+                              selected
+                                ? "ring-2 ring-foreground ring-offset-2 ring-offset-popover"
+                                : ""
+                            }`}
+                          >
+                            <img src={item.value} alt="" className="size-full object-cover" />
+                          </button>
+                          {gallery.canManage ? (
+                            <button
+                              type="button"
+                              onClick={() => void removeFromGallery(item.id)}
+                              aria-label={t`Remove from gallery`}
+                              className="absolute -top-1 -right-1 grid size-4 place-items-center rounded-full bg-secondary text-foreground opacity-0 shadow-sm transition-opacity group-hover/gallery:opacity-100 focus-visible:opacity-100"
+                            >
+                              <X size={10} />
+                            </button>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                    {canAddToGallery ? (
+                      <button
+                        type="button"
+                        onClick={() => void addToGallery()}
+                        aria-label={t`Add this avatar to the gallery`}
+                        className="grid size-10 place-items-center rounded-full border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <Plus size={16} />
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className={showGallery ? "border-t border-border pt-2" : undefined}>
                 <div className="mb-2 text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
                   <Trans>Shape</Trans>
                 </div>

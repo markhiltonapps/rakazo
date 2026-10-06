@@ -125,6 +125,7 @@ import type {
 } from "@rakazo/contracts";
 import {
   ATTACHMENT_MAX_BYTES,
+  AVATAR_GALLERY_MAX_ITEMS,
   appContract,
   BOT_USAGE_WINDOW_DAYS,
   BotSecretAuth,
@@ -1352,6 +1353,39 @@ export function createRouter(deps: RouterDeps) {
             { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
           ),
         );
+        return { ok: true as const };
+      }),
+    },
+    avatarGallery: {
+      list: authed.avatarGallery.list.handler(async ({ context }) => ({
+        items: await deps.prisma.avatarGalleryItem.findMany({
+          orderBy: { createdAt: "asc" },
+          select: { id: true, value: true },
+        }),
+        canManage: context.actor.isDeploymentOwner,
+      })),
+      add: authed.avatarGallery.add.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
+        const valueSha256 = createHash("sha256").update(input.value).digest("hex");
+        const select = { id: true, value: true } as const;
+        const existing = await deps.prisma.avatarGalleryItem.findUnique({
+          where: { valueSha256 },
+          select,
+        });
+        if (existing) return existing;
+        if ((await deps.prisma.avatarGalleryItem.count()) >= AVATAR_GALLERY_MAX_ITEMS) {
+          throw new ORPCError("BAD_REQUEST", { message: "The avatar gallery is full." });
+        }
+        return deps.prisma.avatarGalleryItem.upsert({
+          where: { valueSha256 },
+          create: { value: input.value, valueSha256 },
+          update: {},
+          select,
+        });
+      }),
+      remove: authed.avatarGallery.remove.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
+        await deps.prisma.avatarGalleryItem.deleteMany({ where: { id: input.id } });
         return { ok: true as const };
       }),
     },

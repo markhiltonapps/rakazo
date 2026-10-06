@@ -4202,3 +4202,19 @@ msgstr ""
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Output $ per 1M tokens"
 msgstr ""
+
+#: src/pages/shell/avatar-studio-popover.tsx
+msgid "Add this avatar to the gallery"
+msgstr ""
+
+#: src/pages/shell/avatar-studio-popover.tsx
+msgid "Gallery"
+msgstr ""
+
+#: src/pages/shell/avatar-studio-popover.tsx
+msgid "Gallery avatar {position}"
+msgstr ""
+
+#: src/pages/shell/avatar-studio-popover.tsx
+msgid "Remove from gallery"
+msgstr ""
