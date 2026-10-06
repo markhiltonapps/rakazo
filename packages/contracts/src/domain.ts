@@ -781,6 +781,8 @@ export const BotUsageSchema = z.object({
   costUsd: z.number(),
   /** Tokens from models with no known price. Their spend is missing from `costUsd`. */
   unpricedTokens: z.number().int(),
+  /** Tokens billed to a subscription sign-in, which charges a flat fee rather than per token. */
+  planTokens: z.number().int(),
 });
 export type BotUsage = z.infer<typeof BotUsageSchema>;
 

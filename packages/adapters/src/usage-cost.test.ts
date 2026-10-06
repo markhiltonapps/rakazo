@@ -58,7 +58,7 @@ describe("summarizeBotUsage", () => {
         row({ botId: "bot-b", model: "unpriced-model" }),
         row({ botId: null }),
       ],
-      customPrices,
+      { customPrices, subscriptionProviders: new Set() },
     );
     expect(usage).toEqual([
       {
@@ -66,8 +66,31 @@ describe("summarizeBotUsage", () => {
         tokens: 1_100_015,
         costUsd: expect.closeTo(1.48 + (10 * 2 + 5 * 10) / 1_000_000, 10),
         unpricedTokens: 0,
+        planTokens: 0,
       },
-      { botId: "bot-b", tokens: 1_100_000, costUsd: 0, unpricedTokens: 1_100_000 },
+      {
+        botId: "bot-b",
+        tokens: 1_100_000,
+        costUsd: 0,
+        unpricedTokens: 1_100_000,
+        planTokens: 0,
+      },
+    ]);
+  });
+
+  it("counts subscription sign-in usage as tokens but not as per-token spend", () => {
+    const usage = summarizeBotUsage(
+      [row(), row({ provider: "anthropic", model: "claude-fable-5" })],
+      { customPrices, subscriptionProviders: new Set(["anthropic"]) },
+    );
+    expect(usage).toEqual([
+      {
+        botId: "bot-a",
+        tokens: 2_200_000,
+        costUsd: expect.closeTo(1.48, 10),
+        unpricedTokens: 0,
+        planTokens: 1_100_000,
+      },
     ]);
   });
 });
