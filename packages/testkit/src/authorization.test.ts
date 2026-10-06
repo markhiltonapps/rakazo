@@ -86,6 +86,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
       ["bots/create", botInput("Unauthenticated")],
       ["bots/duplicate", { botId: "missing-bot" }],
       ["bots/update", { botId: "missing-bot", name: "Nope" }],
+      ["bots/encodeAvatar", { contentBase64: "AA==" }],
       ["bots/archive", { botId: "missing-bot" }],
       ["bots/restore", { botId: "missing-bot" }],
       ["bots/remove", { botId: "missing-bot" }],
