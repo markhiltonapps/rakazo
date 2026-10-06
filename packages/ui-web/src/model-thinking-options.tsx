@@ -3,6 +3,11 @@ import { Checkbox } from "./components/ui/checkbox.js";
 import { Input } from "./components/ui/input.js";
 import { NativeSelect, NativeSelectOption } from "./components/ui/native-select.js";
 
+/** Prices as typed, in USD per million tokens. */
+export type ModelPriceFields = { input: string; output: string; cacheRead: string };
+
+const PRICE_KEYS = ["input", "output", "cacheRead"] as const;
+
 export function ModelThinkingOptions({
   reasoning = false,
   onReasoningChange,
@@ -27,6 +32,9 @@ export function ModelThinkingOptions({
   contextWindowLabel,
   imagesLabel,
   maxImagesLabel,
+  prices,
+  onPricesChange,
+  priceLabels,
 }: {
   reasoning?: boolean;
   onReasoningChange?: (reasoning: boolean) => void;
@@ -51,6 +59,9 @@ export function ModelThinkingOptions({
   contextWindowLabel?: string;
   imagesLabel?: string;
   maxImagesLabel?: string;
+  prices?: ModelPriceFields;
+  onPricesChange?: (prices: ModelPriceFields) => void;
+  priceLabels?: ModelPriceFields;
 }) {
   const id = useId();
   const thinkingLevelId = useId();
@@ -58,6 +69,7 @@ export function ModelThinkingOptions({
   const contextWindowId = useId();
   const imagesId = useId();
   const maxImagesId = useId();
+  const priceId = useId();
   return (
     <details className="mt-4 text-sm text-muted-foreground">
       <summary className="cursor-pointer">{advancedLabel}</summary>
@@ -161,6 +173,25 @@ export function ModelThinkingOptions({
           />
         </label>
       ) : null}
+      {prices && onPricesChange && priceLabels
+        ? PRICE_KEYS.map((key) => (
+            <label key={key} htmlFor={`${priceId}-${key}`} className="mt-3 flex items-center gap-2">
+              <span className="min-w-0 flex-1">{priceLabels[key]}</span>
+              <Input
+                id={`${priceId}-${key}`}
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="any"
+                value={prices[key]}
+                onChange={(event) => onPricesChange({ ...prices, [key]: event.target.value })}
+                disabled={disabled}
+                aria-label={priceLabels[key]}
+                className="h-8 w-24 text-center text-foreground"
+              />
+            </label>
+          ))
+        : null}
     </details>
   );
 }

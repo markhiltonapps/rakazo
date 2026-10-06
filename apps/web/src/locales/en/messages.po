@@ -4174,3 +4174,31 @@ msgstr "Your team of always-on agents<0/>that you can give real work to."
 #: src/pages/ResizableSidePanel.tsx
 msgid "Resize panel"
 msgstr "Resize panel"
+
+#: src/pages/shell/bot-usage.tsx
+msgid "{cost} · {tokens} tokens this week"
+msgstr "{cost} · {tokens} tokens this week"
+
+#: src/pages/shell/bot-usage.tsx
+msgid "{tokens} tokens this week"
+msgstr "{tokens} tokens this week"
+
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Cached input $ per 1M tokens"
+msgstr "Cached input $ per 1M tokens"
+
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Enter input and output prices from 0 to {MAX_MODEL_PRICE_PER_MILLION} dollars per 1M tokens."
+msgstr "Enter input and output prices from 0 to {MAX_MODEL_PRICE_PER_MILLION} dollars per 1M tokens."
+
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Input $ per 1M tokens"
+msgstr "Input $ per 1M tokens"
+
+#: src/pages/shell/bot-usage.tsx
+msgid "Last 7 days"
+msgstr "Last 7 days"
+
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Output $ per 1M tokens"
+msgstr "Output $ per 1M tokens"

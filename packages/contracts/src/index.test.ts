@@ -18,6 +18,7 @@ import {
   parseModelContextWindow,
   parseModelMaxImagesPerPrompt,
   parseModelMaxTokens,
+  parseModelPriceFields,
   ReorderBotsInput,
   RunActivityRowSchema,
   RunSchema,
@@ -429,5 +430,23 @@ describe("contracts", () => {
         data: rows.slice(0, 2_501),
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("parseModelPriceFields", () => {
+  it("reads typed prices, clears on all blank, and rejects partial or bad entries", () => {
+    expect(parseModelPriceFields({ input: "2", output: "10", cacheRead: "0.10" })).toEqual({
+      input: 2,
+      output: 10,
+      cacheRead: 0.1,
+    });
+    expect(parseModelPriceFields({ input: "2", output: "10", cacheRead: "" })).toEqual({
+      input: 2,
+      output: 10,
+    });
+    expect(parseModelPriceFields({ input: " ", output: "", cacheRead: "" })).toBeNull();
+    expect(parseModelPriceFields({ input: "2", output: "", cacheRead: "" })).toBeUndefined();
+    expect(parseModelPriceFields({ input: "-1", output: "10", cacheRead: "" })).toBeUndefined();
+    expect(parseModelPriceFields({ input: "2", output: "10", cacheRead: "x" })).toBeUndefined();
   });
 });

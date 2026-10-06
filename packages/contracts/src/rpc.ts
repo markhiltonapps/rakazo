@@ -23,6 +23,7 @@ import {
   BotMcpServerSchema,
   BotSchema,
   BotSectionSchema,
+  BotUsageSchema,
   CapabilityInstallSchema,
   ComputerModeSchema,
   ComputerReleaseReasonSchema,
@@ -803,6 +804,7 @@ export const appContract = {
   },
   usage: {
     list: oc.output(z.array(UsageRecordSchema)),
+    byBot: oc.output(z.array(BotUsageSchema)),
     summary: oc.output(
       z.object({
         inputTokens: z.number(),

@@ -176,6 +176,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
       ["approvalRules/remove", { id: "missing-rule" }],
       ["artifacts/list", { botId: "missing-bot" }],
       ["usage/list"],
+      ["usage/byBot"],
       ["usage/summary"],
       ["export/bot", { botId: "missing-bot" }],
       ["notifications/registerPush", { token: "ExponentPushToken[not-real]" }],

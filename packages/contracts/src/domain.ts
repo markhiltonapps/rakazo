@@ -772,6 +772,18 @@ export const UsageRecordSchema = z.object({
   createdAt: z.string(),
 });
 
+/** How far back the per-bot spend summary looks. */
+export const BOT_USAGE_WINDOW_DAYS = 7;
+
+export const BotUsageSchema = z.object({
+  botId: Id,
+  tokens: z.number().int(),
+  costUsd: z.number(),
+  /** Tokens from models with no known price. Their spend is missing from `costUsd`. */
+  unpricedTokens: z.number().int(),
+});
+export type BotUsage = z.infer<typeof BotUsageSchema>;
+
 export const COMPUTER_UPDATE_STAGES = [
   "preparing",
   "saving",
@@ -919,6 +931,56 @@ export const DEFAULT_MODEL_CONTEXT_WINDOW = 32_768;
 
 /** Largest context window exposed by model settings. */
 export const MAX_MODEL_CONTEXT_WINDOW = 1_048_576;
+
+/** Largest price per million tokens accepted for a custom model, in USD. */
+export const MAX_MODEL_PRICE_PER_MILLION = 10_000;
+
+/**
+ * USD per million tokens, as providers list them. Catalog models carry their own prices;
+ * a custom connection's model has none unless the user enters them. Cached input defaults
+ * to the input price.
+ */
+export const ModelPricesSchema = z.object({
+  input: z.number().min(0).max(MAX_MODEL_PRICE_PER_MILLION),
+  output: z.number().min(0).max(MAX_MODEL_PRICE_PER_MILLION),
+  cacheRead: z.number().min(0).max(MAX_MODEL_PRICE_PER_MILLION).optional(),
+});
+export type ModelPrices = z.infer<typeof ModelPricesSchema>;
+
+/** Parse a price per million tokens entered in model settings; blank stays unset. */
+export function parseModelPrice(value: string): number | undefined {
+  if (!value.trim()) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= MAX_MODEL_PRICE_PER_MILLION
+    ? parsed
+    : undefined;
+}
+
+/** Prices as typed in model settings, in USD per million tokens. */
+export type ModelPriceFields = { input: string; output: string; cacheRead: string };
+
+export function modelPriceFields(prices?: ModelPrices): ModelPriceFields {
+  return {
+    input: prices ? String(prices.input) : "",
+    output: prices ? String(prices.output) : "",
+    cacheRead: prices?.cacheRead !== undefined ? String(prices.cacheRead) : "",
+  };
+}
+
+/**
+ * Read typed prices. All blank clears them (`null`). Input and output are both required and
+ * cached input is optional; `undefined` means the entry is invalid.
+ */
+export function parseModelPriceFields(fields: ModelPriceFields): ModelPrices | null | undefined {
+  if (!fields.input.trim() && !fields.output.trim() && !fields.cacheRead.trim()) return null;
+  const input = parseModelPrice(fields.input);
+  const output = parseModelPrice(fields.output);
+  const cacheRead = parseModelPrice(fields.cacheRead);
+  if (input === undefined || output === undefined) return undefined;
+  if (fields.cacheRead.trim() && cacheRead === undefined) return undefined;
+  return { input, output, ...(cacheRead !== undefined ? { cacheRead } : {}) };
+}
+
 /** Parse the optional per-connection image limit entered in model settings. */
 export function parseModelMaxImagesPerPrompt(
   value: string,
@@ -970,6 +1032,7 @@ export const ModelCredentialSchema = z.object({
   contextWindow: z.number().int().min(1).max(MAX_MODEL_CONTEXT_WINDOW).optional(),
   supportsImages: z.boolean().optional(),
   maxImagesPerPrompt: z.number().int().min(1).max(1000).optional(),
+  prices: ModelPricesSchema.optional(),
   thinkingLevels: z.array(ThinkingLevelSchema).optional(),
 });
 export type ModelCredential = z.infer<typeof ModelCredentialSchema>;
@@ -989,6 +1052,8 @@ export const ModelConnectInputSchema = z
     contextWindow: z.number().int().min(1).max(MAX_MODEL_CONTEXT_WINDOW).optional(),
     supportsImages: z.boolean().optional(),
     maxImagesPerPrompt: z.number().int().min(1).max(1000).nullable().optional(),
+    /** `null` clears saved prices. Omitting it keeps the previous connection's prices. */
+    prices: ModelPricesSchema.nullable().optional(),
   })
   .superRefine((value, ctx) => {
     if (
