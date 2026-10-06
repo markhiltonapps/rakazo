@@ -49,7 +49,7 @@ export function updateModelImageCapabilities(
 
 let catalogModelsCache: Models | undefined;
 
-function catalogModels(): Models {
+export function catalogModels(): Models {
   catalogModelsCache ??= registerOpenAiCompatibleCatalog(registerLocalProvider(builtinModels()));
   return catalogModelsCache;
 }

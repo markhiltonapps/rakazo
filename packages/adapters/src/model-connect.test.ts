@@ -485,6 +485,23 @@ describe("compatible connection updates", () => {
       visionModelIds: ["bot-vision-model", "another-vision-model", "arbitrary-model"],
     });
   });
+  it("saves entered prices, keeps them on later saves, and clears them on null", () => {
+    const prices = { input: 2, output: 10, cacheRead: 0.1 };
+    const priced = buildModelConnectPlaintext({ ...input, prices }, previous);
+    expect(parseModelSecret(priced)).toMatchObject({ prices });
+    expect(
+      modelCredentialDto(
+        { id: "cred", provider: "openai-compatible", label: "Custom", isDefault: true },
+        priced,
+      ),
+    ).toMatchObject({ prices });
+
+    const kept = buildModelConnectPlaintext({ ...input, maxTokens: 32000 }, priced);
+    expect(parseModelSecret(kept)).toMatchObject({ prices, maxTokens: 32000 });
+
+    const cleared = buildModelConnectPlaintext({ ...input, prices: null }, priced);
+    expect(parseModelSecret(cleared)).not.toHaveProperty("prices");
+  });
   it("revalidates inherited keys against the public-HTTPS policy", () => {
     vi.stubEnv("RAKAZO_OPENAI_COMPAT_ALLOW_PUBLIC", "1");
     const baseUrl = "http://example.invalid/v1";

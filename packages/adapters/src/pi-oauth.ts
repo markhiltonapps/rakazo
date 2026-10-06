@@ -7,11 +7,13 @@ import type {
 } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type { ModelCredentialFailedState, ModelCredentialRetireReason } from "@rakazo/adapter-kit";
+import type { ModelPrices } from "@rakazo/contracts";
 import {
   MAX_MODEL_CONTEXT_WINDOW,
   MAX_MODEL_MAX_TOKENS,
   type ModelOAuthBegin,
   type ModelOAuthSignInMode,
+  ModelPricesSchema,
   type ThinkingLevel,
   ThinkingLevelSchema,
 } from "@rakazo/contracts";
@@ -254,6 +256,7 @@ export type StoredModelSecret =
       contextWindow?: number;
       visionModelIds?: string[];
       maxImagesPerPrompt?: number;
+      prices?: ModelPrices;
     };
 
 export type PiOAuthConnected = {
@@ -375,6 +378,7 @@ export function parseModelSecret(plaintext: string): StoredModelSecret {
       parsed.maxImagesPerPrompt <= 1000
         ? parsed.maxImagesPerPrompt
         : undefined;
+    const prices = ModelPricesSchema.safeParse(parsed.prices);
     return {
       kind: "openai_compatible",
       baseUrl: parsed.baseUrl.trim(),
@@ -385,6 +389,7 @@ export function parseModelSecret(plaintext: string): StoredModelSecret {
       ...(contextWindow !== undefined ? { contextWindow } : {}),
       ...(visionModelIds ? { visionModelIds } : {}),
       ...(maxImagesPerPrompt !== undefined ? { maxImagesPerPrompt } : {}),
+      ...(prices.success ? { prices: prices.data } : {}),
     };
   }
   if (parsed.kind === "api_key") {
@@ -439,6 +444,7 @@ export function serializeModelSecret(secret: StoredModelSecret): string {
       ...(secret.maxImagesPerPrompt !== undefined
         ? { maxImagesPerPrompt: secret.maxImagesPerPrompt }
         : {}),
+      ...(secret.prices !== undefined ? { prices: secret.prices } : {}),
     });
   }
   if (secret.maxTokens === undefined) return secret.key;

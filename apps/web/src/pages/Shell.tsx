@@ -253,6 +253,7 @@ import type { SettingsSection } from "./SettingsOverlay";
 import { SpaceSearchResults } from "./SpaceSearch";
 import { BotSettings, CreateBotForm } from "./shell/bot-panel";
 import { BotCreatePicker } from "./shell/bot-picker";
+import { BotUsageLine, useBotUsage } from "./shell/bot-usage";
 import { CommandPalette, isCommandPaletteHotkey } from "./shell/command-palette";
 import {
   ClearConversationDialog,
@@ -572,6 +573,7 @@ export function ShellPage() {
     return () => desktop.removeEventListener("change", closeMobileSidebar);
   }, []);
   const [activityMode, setActivityMode] = useState(readActivityMode);
+  const botUsage = useBotUsage();
   const toggleActivityMode = useCallback(() => {
     setActivityMode((on) => {
       const next = !on;
@@ -3236,6 +3238,9 @@ export function ShellPage() {
                                     : item.chat.preview ||
                                       item.chat.members.map((member) => member.name).join(", ")}
                                 </div>
+                                {item.kind === "bot" ? (
+                                  <BotUsageLine usage={botUsage.get(item.chat.id)} />
+                                ) : null}
                               </div>
                             </button>
                           </div>

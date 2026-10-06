@@ -98,6 +98,7 @@ import {
   selectDefaultCredentialId,
   serializeModelSecret,
   storeBotSecret,
+  summarizeBotUsage,
   takeoverLeaseMs,
   toComputerRef,
   touchRunningComputer,
@@ -115,12 +116,14 @@ import type {
   ComputerStatus,
   McpServer,
   Me,
+  ModelPrices,
   ProductEvent,
   SpaceNavigation,
 } from "@rakazo/contracts";
 import {
   ATTACHMENT_MAX_BYTES,
   appContract,
+  BOT_USAGE_WINDOW_DAYS,
   BotSecretAuth,
   ComputerCommandSchema,
   foldComputerCommands,
@@ -5337,6 +5340,34 @@ export function createRouter(deps: RouterDeps) {
           createdAt: row.createdAt.toISOString(),
         }));
       }),
+      byBot: authed.usage.byBot.handler(async ({ context }) => {
+        const since = new Date(Date.now() - BOT_USAGE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+        const memberships = await deps.prisma.spaceMember.findMany({
+          where: { userId: context.actor.userId },
+          select: { spaceId: true },
+        });
+        const [rows, prices] = await Promise.all([
+          deps.prisma.usageRecord.findMany({
+            where: {
+              spaceId: { in: memberships.map((membership) => membership.spaceId) },
+              userId: context.actor.userId,
+              createdAt: { gte: since },
+              botId: { not: null },
+            },
+            select: {
+              botId: true,
+              provider: true,
+              model: true,
+              inputTokens: true,
+              outputTokens: true,
+              cacheReadTokens: true,
+              cacheWriteTokens: true,
+            },
+          }),
+          customModelPrices(deps, context.actor),
+        ]);
+        return summarizeBotUsage(rows, prices);
+      }),
       summary: authed.usage.summary.handler(async ({ context }) => {
         const result = await deps.prisma.usageRecord.aggregate({
           where: { spaceId: context.actor.spaceId, userId: context.actor.userId },
@@ -6033,6 +6064,40 @@ function computerHostFor(
   if (sandboxProvider !== "docker") return null;
   if (stored === "this-mac" || stored === "docker") return stored;
   return null;
+}
+
+/** Prices the user entered for their custom model connection, keyed by model id. */
+async function customModelPrices(
+  deps: RouterDeps,
+  actor: Actor,
+): Promise<Map<string, ModelPrices>> {
+  const credentials = await deps.prisma.userModelCredential.findMany({
+    where: { userId: actor.userId, provider: OPENAI_COMPATIBLE_PROVIDER_ID },
+    select: {
+      secretId: true,
+      preferences: { where: { userId: actor.userId }, select: { modelId: true } },
+    },
+  });
+  const prices = new Map<string, ModelPrices>();
+  for (const credential of credentials) {
+    const secret = await deps.prisma.secret.findFirst({
+      where: { id: credential.secretId, userId: actor.userId, spaceId: null },
+      select: { ciphertext: true },
+    });
+    if (!secret) continue;
+    let stored: ReturnType<typeof parseModelSecret>;
+    try {
+      stored = parseModelSecret(deps.secrets.load(secret.ciphertext, credential.secretId));
+    } catch {
+      continue;
+    }
+    if (stored.kind !== "openai_compatible" || !stored.prices) continue;
+    for (const preference of credential.preferences) {
+      const modelId = usableModelId(preference.modelId);
+      if (modelId) prices.set(modelId, stored.prices);
+    }
+  }
+  return prices;
 }
 
 async function persistModelCredential(

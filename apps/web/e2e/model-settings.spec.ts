@@ -27,6 +27,9 @@ test("custom connections persist reasoning support and bot thinking", async ({
   await page.getByLabel("Context limit").fill("65536");
   await page.getByRole("checkbox", { name: "Supports images" }).check();
   await page.getByLabel("Maximum images per request").fill("1");
+  await page.getByLabel("Input $ per 1M tokens", { exact: true }).fill("2");
+  await page.getByLabel("Output $ per 1M tokens", { exact: true }).fill("10");
+  await page.getByLabel("Cached input $ per 1M tokens").fill("0.1");
   await captureScreenshot(page, testInfo, "openai-compatible-thinking-connection");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Saved.", { exact: true })).toBeVisible();
@@ -39,6 +42,7 @@ test("custom connections persist reasoning support and bot thinking", async ({
       contextWindow?: number;
       supportsImages?: boolean;
       maxImagesPerPrompt?: number;
+      prices?: { input: number; output: number; cacheRead?: number };
     }>
   >(page, "models/credentials", {});
   expect(credentials.find((entry) => entry.modelId === "arbitrary-model")?.reasoning).toBe(true);
@@ -55,6 +59,11 @@ test("custom connections persist reasoning support and bot thinking", async ({
   expect(credentials.find((entry) => entry.modelId === "arbitrary-model")?.maxImagesPerPrompt).toBe(
     1,
   );
+  expect(credentials.find((entry) => entry.modelId === "arbitrary-model")?.prices).toEqual({
+    input: 2,
+    output: 10,
+    cacheRead: 0.1,
+  });
   await page.reload();
   await openUserSettings(page, "models");
   await page.getByText("Advanced", { exact: true }).click();
@@ -66,6 +75,7 @@ test("custom connections persist reasoning support and bot thinking", async ({
   await expect(page.getByLabel("Context limit")).toHaveValue("65536");
   await expect(page.getByRole("checkbox", { name: "Supports images" })).toBeChecked();
   await expect(page.getByLabel("Maximum images per request")).toHaveValue("1");
+  await expect(page.getByLabel("Output $ per 1M tokens", { exact: true })).toHaveValue("10");
   await page.getByLabel("Maximum images per request").fill("");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Saved.", { exact: true })).toBeVisible();

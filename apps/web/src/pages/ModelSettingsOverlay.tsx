@@ -6,12 +6,15 @@ import {
   DEFAULT_MODEL_MAX_TOKENS,
   MAX_MODEL_CONTEXT_WINDOW,
   MAX_MODEL_MAX_TOKENS,
+  MAX_MODEL_PRICE_PER_MILLION,
+  modelPriceFields,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   openAiCompatibleConnectReady,
   openAiCompatibleProbeSuccessMessage,
   parseModelContextWindow,
   parseModelMaxImagesPerPrompt,
   parseModelMaxTokens,
+  parseModelPriceFields,
 } from "@rakazo/contracts";
 import {
   COMPATIBLE_THINKING_LEVELS,
@@ -91,6 +94,7 @@ export function ModelSettingsOverlay({
   const [contextWindow, setContextWindow] = useState(String(DEFAULT_MODEL_CONTEXT_WINDOW));
   const [supportsImages, setSupportsImages] = useState(false);
   const [maxImagesPerPrompt, setMaxImagesPerPrompt] = useState("");
+  const [prices, setPrices] = useState(() => modelPriceFields());
   const [{ models: probeModels, probing }, setProbe] = useState(initialModelProbeState);
   const [modelProbe] = useState(() => createModelProbe(setProbe));
   const resetOpenAiCompatibleProbe = modelProbe.reset;
@@ -169,6 +173,7 @@ export function ModelSettingsOverlay({
         setContextWindow(String(nextCredential?.contextWindow ?? DEFAULT_MODEL_CONTEXT_WINDOW));
         setSupportsImages(nextCredential?.supportsImages ?? false);
         setMaxImagesPerPrompt(String(nextCredential?.maxImagesPerPrompt ?? ""));
+        setPrices(modelPriceFields(nextCredential?.prices));
       } else {
         // A credential's stored effort is bound to its saved model choice.
         const nextEntry = nextCatalog.find(
@@ -350,6 +355,7 @@ export function ModelSettingsOverlay({
     setContextWindow(String(nextCredential?.contextWindow ?? DEFAULT_MODEL_CONTEXT_WINDOW));
     setSupportsImages(nextCredential?.supportsImages ?? false);
     setMaxImagesPerPrompt(String(nextCredential?.maxImagesPerPrompt ?? ""));
+    setPrices(modelPriceFields(nextCredential?.prices));
     setModelId(nextModelId);
     setBaseUrl(
       nextProvider === OPENAI_COMPATIBLE_PROVIDER_ID ? (nextCredential?.baseUrl ?? "") : "",
@@ -465,6 +471,13 @@ export function ModelSettingsOverlay({
       return;
     }
     if (isOpenAiCompatible && parsedMaxTokens === undefined) return;
+    const parsedPrices = isOpenAiCompatible ? parseModelPriceFields(prices) : null;
+    if (parsedPrices === undefined) {
+      setError(
+        t`Enter input and output prices from 0 to ${MAX_MODEL_PRICE_PER_MILLION} dollars per 1M tokens.`,
+      );
+      return;
+    }
     setError(null);
     setNotice(null);
     setPending("connect");
@@ -481,6 +494,7 @@ export function ModelSettingsOverlay({
               contextWindow: parsedContextWindow,
               supportsImages,
               maxImagesPerPrompt: maxImagesPerPromptInput,
+              prices: parsedPrices,
               apiKey: apiKey.trim() || undefined,
               label: selected.providerName ?? selected.provider,
             }
@@ -1172,6 +1186,17 @@ export function ModelSettingsOverlay({
                       setNotice(null);
                     }}
                     maxImagesLabel={t`Maximum images per request`}
+                    prices={prices}
+                    onPricesChange={(value) => {
+                      selectionRevisionRef.current += 1;
+                      setPrices(value);
+                      setNotice(null);
+                    }}
+                    priceLabels={{
+                      input: t`Input $ per 1M tokens`,
+                      output: t`Output $ per 1M tokens`,
+                      cacheRead: t`Cached input $ per 1M tokens`,
+                    }}
                   />
                 </div>
               ) : null}
