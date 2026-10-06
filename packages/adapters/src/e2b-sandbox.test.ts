@@ -98,6 +98,15 @@ describe("E2B computer backend", () => {
     expect(shouldSkipPortableWorkspaceFile(".browser-profiles/chromium/SingletonLock")).toBe(true);
   });
 
+  it("leaves installed packages and build output out of workspace snapshots", () => {
+    expect(shouldSkipPortableWorkspaceFile("app/node_modules")).toBe(true);
+    expect(shouldSkipPortableWorkspaceFile("app/node_modules/next/package.json")).toBe(true);
+    expect(shouldSkipPortableWorkspaceFile("app/.next/cache/webpack/data.pack")).toBe(true);
+    expect(shouldSkipPortableWorkspaceFile("app/package.json")).toBe(false);
+    expect(shouldSkipPortableWorkspaceFile("app/src/next.config.ts")).toBe(false);
+    expect(shouldSkipPortableWorkspaceFile("notes/node_modules.md")).toBe(false);
+  });
+
   it.each([
     "ECONNRESET",
     "ECONNREFUSED",

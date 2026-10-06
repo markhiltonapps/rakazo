@@ -35,11 +35,14 @@ const skippedBrowserProfileFiles = new Set([
   ".parentlock",
   "lock",
 ]);
+/** Installed packages and build output: large, and recreated by the next install or build. */
+const skippedRebuildableDirectories = new Set(["node_modules", ".next"]);
 
-/** Excludes transient browser state that is unsafe or wasteful to restore. */
+/** Excludes transient browser state and rebuildable folders that are unsafe or wasteful to restore. */
 export function shouldSkipPortableWorkspaceFile(relative: string) {
-  if (!relative.startsWith(".browser-profiles/")) return false;
   const segments = relative.split("/");
+  if (segments.some((segment) => skippedRebuildableDirectories.has(segment))) return true;
+  if (!relative.startsWith(".browser-profiles/")) return false;
   const name = segments.at(-1) ?? "";
   return (
     segments.some((segment) => skippedBrowserProfileDirectories.has(segment)) ||
