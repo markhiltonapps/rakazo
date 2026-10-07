@@ -24,6 +24,59 @@ import { rpc } from "../../lib/rpc";
 /** The server keeps these animated when the result fits an avatar. */
 const ANIMATABLE_IMAGE_TYPES = new Set(["image/gif", "image/webp"]);
 
+/**
+ * An avatar data URL for an image file. GIF and WebP go to the server, which keeps them
+ * animated when they fit; anything else, or a failed server encode, becomes a still crop.
+ */
+async function encodeAvatarFile(file: File): Promise<string | null> {
+  if (ANIMATABLE_IMAGE_TYPES.has(file.type) && file.size <= ATTACHMENT_MAX_BYTES) {
+    try {
+      const { color } = await rpc.bots.encodeAvatar({
+        contentBase64: await readFileAsBase64(file),
+      });
+      return color;
+    } catch {
+      // Fall back to a still crop below.
+    }
+  }
+  return drawStillAvatar(file);
+}
+
+/** A 256px circle-cropped still webp, or null when the browser cannot read the image. */
+function drawStillAvatar(file: File): Promise<string | null> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onerror = () => resolve(null);
+    reader.onload = (event) => {
+      const src = event.target?.result;
+      if (typeof src !== "string" || !src) return resolve(null);
+      const img = new Image();
+      img.onerror = () => resolve(null);
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        const targetSize = 256;
+        canvas.width = targetSize;
+        canvas.height = targetSize;
+        if (!ctx) return resolve(null);
+
+        ctx.beginPath();
+        ctx.arc(targetSize / 2, targetSize / 2, targetSize / 2, 0, Math.PI * 2);
+        ctx.clip();
+
+        const minDim = Math.min(img.width, img.height);
+        const sx = (img.width - minDim) / 2;
+        const sy = (img.height - minDim) / 2;
+        ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, targetSize, targetSize);
+
+        resolve(canvas.toDataURL("image/webp", 0.9));
+      };
+      img.src = src;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export interface AvatarStudioPopoverProps {
   value: string;
   identity?: string;
@@ -47,15 +100,13 @@ export function AvatarStudioPopover({
   const [encoding, setEncoding] = useState(false);
   const [gallery, setGallery] = useState<AvatarGallery | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const galleryFileInputRef = useRef<HTMLInputElement>(null);
 
   const parsed = parseBotAvatar(value, identity);
   const currentColor = parsed.color || DEFAULT_GROK_BOT_COLOR;
   const currentShape = parsed.shapeIndex ?? 0;
   const canAddToGallery =
-    gallery?.canManage === true &&
-    parsed.isImage &&
-    gallery.items.length < AVATAR_GALLERY_MAX_ITEMS &&
-    !gallery.items.some((item) => item.value === value);
+    gallery?.canManage === true && gallery.items.length < AVATAR_GALLERY_MAX_ITEMS;
   const showGallery = Boolean(gallery?.items.length) || canAddToGallery;
 
   useEffect(() => {
@@ -72,8 +123,10 @@ export function AvatarStudioPopover({
     };
   }, [open]);
 
-  async function addToGallery() {
-    const item = await rpc.avatarGallery.add({ value }).catch(() => null);
+  async function addToGallery(file: File) {
+    const encoded = await encodeWhileBusy(file);
+    if (!encoded) return;
+    const item = await rpc.avatarGallery.add({ value: encoded }).catch(() => null);
     if (!item) return;
     setGallery((current) =>
       current
@@ -103,66 +156,29 @@ export function AvatarStudioPopover({
     onChange(`${DEFAULT_GROK_BOT_COLOR}::shape_0`);
   }
 
-  function processImageFile(file: File) {
-    if (!file.type.startsWith("image/") || encoding) return;
-    if (ANIMATABLE_IMAGE_TYPES.has(file.type) && file.size <= ATTACHMENT_MAX_BYTES) {
-      void encodeOnServer(file);
-      return;
-    }
-    drawStillAvatar(file);
+  async function processImageFile(file: File) {
+    const encoded = await encodeWhileBusy(file);
+    if (!encoded) return;
+    onChange(encoded);
+    setOpen(false);
   }
 
-  async function encodeOnServer(file: File) {
+  /** Encode one image at a time, showing the spinner meanwhile. */
+  async function encodeWhileBusy(file: File): Promise<string | null> {
+    if (!file.type.startsWith("image/") || encoding) return null;
     setEncoding(true);
     try {
-      const { color } = await rpc.bots.encodeAvatar({
-        contentBase64: await readFileAsBase64(file),
-      });
-      onChange(color);
-      setOpen(false);
-    } catch {
-      drawStillAvatar(file);
+      return await encodeAvatarFile(file);
     } finally {
       setEncoding(false);
     }
-  }
-
-  function drawStillAvatar(file: File) {
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const src = event.target?.result as string;
-      if (!src) return;
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        const targetSize = 256;
-        canvas.width = targetSize;
-        canvas.height = targetSize;
-        if (!ctx) return;
-
-        ctx.beginPath();
-        ctx.arc(targetSize / 2, targetSize / 2, targetSize / 2, 0, Math.PI * 2);
-        ctx.clip();
-
-        const minDim = Math.min(img.width, img.height);
-        const sx = (img.width - minDim) / 2;
-        const sy = (img.height - minDim) / 2;
-        ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, targetSize, targetSize);
-
-        onChange(canvas.toDataURL("image/webp", 0.9));
-        setOpen(false);
-      };
-      img.src = src;
-    };
-    reader.readAsDataURL(file);
   }
 
   function handleDrop(event: DragEvent<HTMLButtonElement>) {
     event.preventDefault();
     setDragOver(false);
     const file = event.dataTransfer.files?.[0];
-    if (file) processImageFile(file);
+    if (file) void processImageFile(file);
   }
 
   function handlePaste(event: ClipboardEvent<HTMLButtonElement>) {
@@ -173,7 +189,7 @@ export function AvatarStudioPopover({
       if (!item?.type.startsWith("image/")) continue;
       const file = item.getAsFile();
       if (file) {
-        processImageFile(file);
+        void processImageFile(file);
         break;
       }
     }
@@ -301,13 +317,27 @@ export function AvatarStudioPopover({
                     {canAddToGallery ? (
                       <button
                         type="button"
-                        onClick={() => void addToGallery()}
-                        aria-label={t`Add this avatar to the gallery`}
+                        onClick={() => galleryFileInputRef.current?.click()}
+                        aria-label={t`Add an image to the gallery`}
+                        aria-busy={encoding}
+                        disabled={encoding}
                         className="grid size-10 place-items-center rounded-full border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                       >
-                        <Plus size={16} />
+                        {encoding ? <Spinner /> : <Plus size={16} />}
                       </button>
                     ) : null}
+                    <input
+                      ref={galleryFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      data-testid="avatar-gallery-file"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        event.target.value = "";
+                        if (file) void addToGallery(file);
+                      }}
+                    />
                   </div>
                 </div>
               ) : null}
@@ -384,7 +414,7 @@ export function AvatarStudioPopover({
                 onChange={(event) => {
                   const file = event.target.files?.[0];
                   event.target.value = "";
-                  if (file) processImageFile(file);
+                  if (file) void processImageFile(file);
                 }}
               />
               <div className="mb-2 grid size-10 place-items-center rounded-full bg-secondary text-muted-foreground">

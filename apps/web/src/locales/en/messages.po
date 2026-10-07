@@ -4201,8 +4201,8 @@ msgid "Output $ per 1M tokens"
 msgstr "Output $ per 1M tokens"
 
 #: src/pages/shell/avatar-studio-popover.tsx
-msgid "Add this avatar to the gallery"
-msgstr "Add this avatar to the gallery"
+msgid "Add an image to the gallery"
+msgstr "Add an image to the gallery"
 
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Gallery"
