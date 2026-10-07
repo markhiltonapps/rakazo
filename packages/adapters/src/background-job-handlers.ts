@@ -19,6 +19,7 @@ import { compactHistory } from "./history-compaction.js";
 import type { MemoryProviderResolver } from "./memory-provider-factory.js";
 import { deliverMessagingOutbound, mirrorMessagingOutbound } from "./messaging-delivery.js";
 import type { EncryptedSecretStore } from "./secrets.js";
+import { suggestReplyForRun } from "./suggested-reply.js";
 import { expireTaughtSkillTeaching } from "./teaching-session.js";
 
 export function createBackgroundJobHandlers(deps: {
@@ -96,6 +97,18 @@ export function createBackgroundJobHandlers(deps: {
           cloudAgent: deps.cloudAgent,
         },
         payload,
+      );
+    },
+    "message.suggest_reply": async (payload) => {
+      await suggestReplyForRun(
+        {
+          prisma: deps.prisma,
+          runtime: deps.runtime,
+          events: deps.events,
+          deploymentModelKey: deps.deploymentModelKey,
+          ...(deps.executor.resolveModel ? { resolveModel: deps.executor.resolveModel } : {}),
+        },
+        payload.runId,
       );
     },
     "history.compact": async (payload) => {

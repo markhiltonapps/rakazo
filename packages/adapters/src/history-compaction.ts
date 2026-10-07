@@ -216,6 +216,31 @@ export interface CompactHistoryDeps {
   }) => Promise<AgentRunRequest["model"]>;
 }
 
+/** The model a bot's own runs use, for background completions made on that bot's behalf. */
+export async function resolveBackgroundModel(
+  deps: Pick<CompactHistoryDeps, "prisma" | "deploymentModelKey" | "resolveModel">,
+  scope: { userId: string; spaceId: string; botId: string },
+): Promise<AgentRunRequest["model"]> {
+  if (deps.resolveModel) return deps.resolveModel(scope);
+  if (deps.deploymentModelKey) {
+    const deploymentFallback = resolveDeploymentModel();
+    return {
+      // Provider must come from the same resolver as the key, not a hardcoded one.
+      provider: deploymentFallback.provider,
+      id: deploymentFallback.model,
+      apiKey: deps.deploymentModelKey,
+    };
+  }
+  const settings = await deps.prisma.deploymentSettings.findUnique({
+    where: { id: "default" },
+  });
+  return {
+    provider: settings?.defaultModelProvider ?? "scripted",
+    id: settings?.defaultModelId ?? "scripted",
+    apiKey: undefined,
+  };
+}
+
 export async function compactHistory(deps: CompactHistoryDeps, threadId: string): Promise<void> {
   const thread = await deps.prisma.thread.findUniqueOrThrow({ where: { id: threadId } });
   if (!thread.botId) return;
@@ -326,30 +351,11 @@ export async function compactHistory(deps: CompactHistoryDeps, threadId: string)
   // "scripted" means nothing at all is configured: ScriptedAgentRuntime answers by echoing canned
   // text keyed off the prompt, so summarizing with it would save nonsense to external memory and
   // advance the cursor past messages that are then lost from both stores. Skip instead.
-  const deploymentFallback = resolveDeploymentModel();
-  const model = deps.resolveModel
-    ? await deps.resolveModel({
-        userId: thread.userId,
-        spaceId: thread.spaceId,
-        botId: thread.botId,
-      })
-    : deps.deploymentModelKey
-      ? {
-          // Provider must come from the same resolver as the key, not a hardcoded one.
-          provider: deploymentFallback.provider,
-          id: deploymentFallback.model,
-          apiKey: deps.deploymentModelKey,
-        }
-      : await (async () => {
-          const settings = await deps.prisma.deploymentSettings.findUnique({
-            where: { id: "default" },
-          });
-          return {
-            provider: settings?.defaultModelProvider ?? "scripted",
-            id: settings?.defaultModelId ?? "scripted",
-            apiKey: undefined,
-          };
-        })();
+  const model = await resolveBackgroundModel(deps, {
+    userId: thread.userId,
+    spaceId: thread.spaceId,
+    botId: thread.botId,
+  });
   if (!deps.runtime.describe().capabilities.compaction || model.provider === "scripted") {
     getLogger().info(`history.compact skipped for thread ${threadId}: no usable summarizer model`);
     return;

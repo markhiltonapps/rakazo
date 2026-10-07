@@ -20,6 +20,7 @@ const payloadSchemas = {
   }),
   "skill.teaching-expire": z.object({ skillId: z.string().min(1) }),
   "history.compact": z.object({ threadId: z.string().min(1) }),
+  "message.suggest_reply": z.object({ runId: z.string().min(1) }),
   "messaging.deliver": z.object({ runId: z.string().min(1).optional() }),
   "cloud_agent.poll": z.object({ agentId: z.string().min(1) }),
 } satisfies { [Name in BackgroundJobName]: z.ZodType<BackgroundJobPayloads[Name]> };
@@ -138,6 +139,16 @@ export function historyCompactJob(threadId: string): BackgroundJob {
     payload: { threadId },
     replaceKey: historyCompactJobKey(threadId),
     maxAttempts: HISTORY_COMPACT_MAX_ATTEMPTS,
+  };
+}
+
+/** One short completion per question; a failure only means no suggestion, so never retry. */
+export function suggestReplyJob(runId: string): BackgroundJob {
+  return {
+    name: "message.suggest_reply",
+    payload: { runId },
+    replaceKey: `message.suggest_reply:${runId}`,
+    maxAttempts: 1,
   };
 }
 

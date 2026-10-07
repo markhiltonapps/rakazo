@@ -30,6 +30,7 @@ import {
   routineJobKey,
   routineWakeupJob,
   runContinueJob,
+  suggestReplyJob,
 } from "@rakazo/adapter-kit";
 import type { ComputerCommand, MessageBlock, RunStatus } from "@rakazo/contracts";
 import {
@@ -349,6 +350,7 @@ import {
   finalBlocksAfterMidTurnProgress,
   isProgressMessageTruncated,
   isUserProgressClientNonce,
+  questionAwaitingSuggestion,
   userProgressClientNonce,
   withSuggestedReply,
 } from "./user-progress.js";
@@ -4755,6 +4757,17 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
           } catch (error) {
             getLogger().error("history.compact enqueue failed", error);
+          }
+          // A call or an outside chat app has no message box to put a suggestion in.
+          if (
+            !handedOff &&
+            !voiceCall &&
+            !messagingChannelRun &&
+            questionAwaitingSuggestion(blocks)
+          ) {
+            await deps.jobs
+              .enqueue(suggestReplyJob(runId))
+              .catch((error) => getLogger().error("message.suggest_reply enqueue failed", error));
           }
         } catch (error) {
           if (!terminalCheckpointComplete) {
