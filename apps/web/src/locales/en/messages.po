@@ -3899,6 +3899,7 @@ msgid "To:"
 msgstr "To:"
 
 #: src/pages/Artifacts.tsx
+#: src/pages/shell/bot-usage.tsx
 msgid "Today"
 msgstr "Today"
 
@@ -4195,10 +4196,6 @@ msgstr "Enter input and output prices from 0 to {MAX_MODEL_PRICE_PER_MILLION} do
 msgid "Input $ per 1M tokens"
 msgstr "Input $ per 1M tokens"
 
-#: src/pages/shell/bot-usage.tsx
-msgid "Last 7 days"
-msgstr "Last 7 days"
-
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Output $ per 1M tokens"
 msgstr "Output $ per 1M tokens"
@@ -4218,3 +4215,15 @@ msgstr "Gallery avatar {position}"
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Remove from gallery"
 msgstr "Remove from gallery"
+
+#: src/pages/shell/bot-usage.tsx
+msgid "Month"
+msgstr "Month"
+
+#: src/pages/shell/bot-usage.tsx
+msgid "Week"
+msgstr "Week"
+
+#: src/pages/shell/bot-usage.tsx
+msgid "{tokens} tokens"
+msgstr "{tokens} tokens"

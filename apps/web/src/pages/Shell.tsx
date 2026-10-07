@@ -181,7 +181,7 @@ import {
   screenIframeSandbox,
 } from "../lib/computer-screen";
 import { publishComputerCommand } from "../lib/computer-workspace";
-import { desktopBridge } from "../lib/desktop";
+import { desktopBridge, windowChromeKind } from "../lib/desktop";
 import { scheduleFocusPrompt } from "../lib/focus-prompt";
 import { localTimezone } from "../lib/local-timezone";
 import { copyableMessageText } from "../lib/message-text";
@@ -253,7 +253,7 @@ import type { SettingsSection } from "./SettingsOverlay";
 import { SpaceSearchResults } from "./SpaceSearch";
 import { BotSettings, CreateBotForm } from "./shell/bot-panel";
 import { BotCreatePicker } from "./shell/bot-picker";
-import { BotUsageLine, useBotUsage } from "./shell/bot-usage";
+import { BotUsageLine, hasMonthUsage, SpendSummary, useUsageOverview } from "./shell/bot-usage";
 import { CommandPalette, isCommandPaletteHotkey } from "./shell/command-palette";
 import {
   ClearConversationDialog,
@@ -573,7 +573,14 @@ export function ShellPage() {
     return () => desktop.removeEventListener("change", closeMobileSidebar);
   }, []);
   const [activityMode, setActivityMode] = useState(readActivityMode);
-  const botUsage = useBotUsage();
+  // A bot starting or finishing work refreshes spend right away instead of on the next poll.
+  const usageOverview = useUsageOverview(bots.map((bot) => `${bot.id}:${bot.status}`).join("|"));
+  const botUsage = useMemo(
+    () => new Map((usageOverview?.byBot ?? []).map((usage) => [usage.botId, usage])),
+    [usageOverview],
+  );
+  // The web build has no window controls in that corner, so spend can sit in the top bar.
+  const spendInTopBar = windowChromeKind(desktopBridge()) === "spacer";
   const toggleActivityMode = useCallback(() => {
     setActivityMode((on) => {
       const next = !on;
@@ -2819,7 +2826,11 @@ export function ShellPage() {
         }`}
       >
         <div className="app-drag flex items-center justify-between px-[18px] pb-3 pt-4">
-          <WindowChrome />
+          {spendInTopBar && hasMonthUsage(usageOverview) ? (
+            <SpendSummary overview={usageOverview} />
+          ) : (
+            <WindowChrome />
+          )}
           <div className="relative flex items-center gap-2.5">
             <button
               type="button"
@@ -2903,6 +2914,11 @@ export function ShellPage() {
             </Popover>
           </div>
         </div>
+        {!spendInTopBar && hasMonthUsage(usageOverview) ? (
+          <div className="px-[18px] pb-3">
+            <SpendSummary overview={usageOverview} />
+          </div>
+        ) : null}
         <InputGroup
           data-testid="sidebar-search"
           className="mx-2.5 mb-3 w-auto rounded-xl bg-card dark:bg-input border border-border text-muted-foreground focus-within:border-ring"

@@ -1,7 +1,7 @@
 import * as z from "zod";
 import { BotAvatarValueSchema } from "./bot-avatar.js";
 import { ThreadMessageSchema } from "./events.js";
-import { Id, MemoryScope, RunStatus, SandboxKind } from "./ids.js";
+import { Id, IsoDate, MemoryScope, RunStatus, SandboxKind } from "./ids.js";
 import { McpHeadersSchema, McpRemoteEndpointSchema, McpTransportSchema } from "./mcp.js";
 
 export const ComputerModeSchema = z.enum(["team", "dedicated"]);
@@ -772,11 +772,8 @@ export const UsageRecordSchema = z.object({
   createdAt: z.string(),
 });
 
-/** How far back the per-bot spend summary looks. */
-export const BOT_USAGE_WINDOW_DAYS = 7;
-
-export const BotUsageSchema = z.object({
-  botId: Id,
+/** Tokens and per-token spend over some period. */
+export const UsageTotalsSchema = z.object({
   tokens: z.number().int(),
   costUsd: z.number(),
   /** Tokens from models with no known price. Their spend is missing from `costUsd`. */
@@ -784,7 +781,30 @@ export const BotUsageSchema = z.object({
   /** Tokens billed to a subscription sign-in, which charges a flat fee rather than per token. */
   planTokens: z.number().int(),
 });
+export type UsageTotals = z.infer<typeof UsageTotalsSchema>;
+
+export const BotUsageSchema = UsageTotalsSchema.extend({ botId: Id });
 export type BotUsage = z.infer<typeof BotUsageSchema>;
+
+/** Furthest back a usage period may start: a calendar month plus a day of time zone slack. */
+export const USAGE_PERIOD_MAX_DAYS = 32;
+
+/** Where today, this week and this month start in the viewer's own time zone. */
+export const UsageOverviewInputSchema = z.object({
+  dayStart: IsoDate,
+  weekStart: IsoDate,
+  monthStart: IsoDate,
+});
+export type UsageOverviewInput = z.infer<typeof UsageOverviewInputSchema>;
+
+/** Spend across every bot for today, this week and this month, and each bot's week. */
+export const UsageOverviewSchema = z.object({
+  day: UsageTotalsSchema,
+  week: UsageTotalsSchema,
+  month: UsageTotalsSchema,
+  byBot: z.array(BotUsageSchema),
+});
+export type UsageOverview = z.infer<typeof UsageOverviewSchema>;
 
 export const COMPUTER_UPDATE_STAGES = [
   "preparing",

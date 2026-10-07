@@ -1,6 +1,6 @@
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { calculateCost } from "@earendil-works/pi-ai";
-import type { BotUsage, ModelPrices } from "@rakazo/contracts";
+import type { BotUsage, ModelPrices, UsageOverview, UsageTotals } from "@rakazo/contracts";
 import { catalogModels } from "./model-vision.js";
 import {
   OPENAI_COMPATIBLE_PROVIDER_ID,
@@ -61,31 +61,55 @@ export function usageCostUsd(row: UsageRow, customPrices: CustomModelPrices): nu
   }).total;
 }
 
+function emptyTotals(): UsageTotals {
+  return { tokens: 0, costUsd: 0, unpricedTokens: 0, planTokens: 0 };
+}
+
 /**
- * Total tokens and per-token spend per bot. Rows without a bot are left out. Usage on a
- * subscription sign-in counts toward tokens only: the plan's flat fee is not per-token spend.
+ * Add one call to a running total. Usage on a subscription sign-in counts toward tokens only:
+ * the plan's flat fee is not per-token spend.
  */
+function addUsage(total: UsageTotals, row: UsageRow, billing: UsageBilling): void {
+  const tokens = row.inputTokens + row.outputTokens;
+  total.tokens += tokens;
+  if (billing.subscriptionProviders.has(row.provider)) {
+    total.planTokens += tokens;
+    return;
+  }
+  const cost = usageCostUsd(row, billing.customPrices);
+  if (cost === undefined) total.unpricedTokens += tokens;
+  else total.costUsd += cost;
+}
+
+/** Total tokens and per-token spend per bot. Rows without a bot are left out. */
 export function summarizeBotUsage(rows: Iterable<UsageRow>, billing: UsageBilling): BotUsage[] {
   const byBot = new Map<string, BotUsage>();
   for (const row of rows) {
     if (!row.botId) continue;
-    const tokens = row.inputTokens + row.outputTokens;
-    const total = byBot.get(row.botId) ?? {
-      botId: row.botId,
-      tokens: 0,
-      costUsd: 0,
-      unpricedTokens: 0,
-      planTokens: 0,
-    };
-    total.tokens += tokens;
-    if (billing.subscriptionProviders.has(row.provider)) {
-      total.planTokens += tokens;
-    } else {
-      const cost = usageCostUsd(row, billing.customPrices);
-      if (cost === undefined) total.unpricedTokens += tokens;
-      else total.costUsd += cost;
-    }
+    const total = byBot.get(row.botId) ?? { botId: row.botId, ...emptyTotals() };
+    addUsage(total, row, billing);
     byBot.set(row.botId, total);
   }
   return [...byBot.values()];
+}
+
+/** Spend across all usage for today, this week and this month, plus each bot's week. */
+export function summarizeUsageOverview(
+  rows: Iterable<UsageRow & { createdAt: Date }>,
+  billing: UsageBilling,
+  periods: { dayStart: Date; weekStart: Date; monthStart: Date },
+): UsageOverview {
+  const day = emptyTotals();
+  const week = emptyTotals();
+  const month = emptyTotals();
+  const weekRows: UsageRow[] = [];
+  for (const row of rows) {
+    if (row.createdAt >= periods.dayStart) addUsage(day, row, billing);
+    if (row.createdAt >= periods.weekStart) {
+      addUsage(week, row, billing);
+      weekRows.push(row);
+    }
+    if (row.createdAt >= periods.monthStart) addUsage(month, row, billing);
+  }
+  return { day, week, month, byBot: summarizeBotUsage(weekRows, billing) };
 }

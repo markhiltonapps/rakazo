@@ -101,7 +101,7 @@ import {
   selectDefaultCredentialId,
   serializeModelSecret,
   storeBotSecret,
-  summarizeBotUsage,
+  summarizeUsageOverview,
   takeoverLeaseMs,
   toComputerRef,
   touchRunningComputer,
@@ -127,12 +127,12 @@ import {
   ATTACHMENT_MAX_BYTES,
   AVATAR_GALLERY_MAX_ITEMS,
   appContract,
-  BOT_USAGE_WINDOW_DAYS,
   BotSecretAuth,
   ComputerCommandSchema,
   foldComputerCommands,
   IntegrationProviderIdSchema,
   OPENAI_COMPATIBLE_PROVIDER_ID,
+  USAGE_PERIOD_MAX_DAYS,
   usableModelId,
 } from "@rakazo/contracts";
 import {
@@ -5384,8 +5384,18 @@ export function createRouter(deps: RouterDeps) {
           createdAt: row.createdAt.toISOString(),
         }));
       }),
-      byBot: authed.usage.byBot.handler(async ({ context }) => {
-        const since = new Date(Date.now() - BOT_USAGE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+      overview: authed.usage.overview.handler(async ({ context, input }) => {
+        const periods = {
+          dayStart: new Date(input.dayStart),
+          weekStart: new Date(input.weekStart),
+          monthStart: new Date(input.monthStart),
+        };
+        const since = new Date(Math.min(...Object.values(periods).map((start) => start.getTime())));
+        if (since.getTime() < Date.now() - USAGE_PERIOD_MAX_DAYS * 24 * 60 * 60 * 1000) {
+          throw new ORPCError("BAD_REQUEST", {
+            message: `Usage periods can start at most ${USAGE_PERIOD_MAX_DAYS} days ago.`,
+          });
+        }
         const memberships = await deps.prisma.spaceMember.findMany({
           where: { userId: context.actor.userId },
           select: { spaceId: true },
@@ -5396,7 +5406,6 @@ export function createRouter(deps: RouterDeps) {
               spaceId: { in: memberships.map((membership) => membership.spaceId) },
               userId: context.actor.userId,
               createdAt: { gte: since },
-              botId: { not: null },
             },
             select: {
               botId: true,
@@ -5406,11 +5415,12 @@ export function createRouter(deps: RouterDeps) {
               outputTokens: true,
               cacheReadTokens: true,
               cacheWriteTokens: true,
+              createdAt: true,
             },
           }),
           usageBilling(deps, context.actor),
         ]);
-        return summarizeBotUsage(rows, billing);
+        return summarizeUsageOverview(rows, billing, periods);
       }),
       summary: authed.usage.summary.handler(async ({ context }) => {
         const result = await deps.prisma.usageRecord.aggregate({

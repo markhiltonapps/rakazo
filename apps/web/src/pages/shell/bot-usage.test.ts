@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { formatBotUsage } from "./bot-usage";
+import { formatBotUsage, usagePeriodStarts } from "./bot-usage";
 
 vi.mock("../../lib/rpc", () => ({ rpc: {} }));
 vi.mock("@lingui/react/macro", () => ({ Trans: () => null, useLingui: () => ({}) }));
@@ -29,5 +29,25 @@ describe("formatBotUsage", () => {
       cost: null,
       tokens: "3M",
     });
+  });
+});
+
+describe("usagePeriodStarts", () => {
+  const local = (day: number) => new Date(2026, 9, day).toISOString();
+
+  it("starts today at local midnight, the month on the 1st, and the week on the locale's first day", () => {
+    // Wednesday, October 7 2026.
+    const wednesday = new Date(2026, 9, 7, 15, 30);
+    expect(usagePeriodStarts(wednesday, 7)).toEqual({
+      dayStart: local(7),
+      weekStart: local(4),
+      monthStart: local(1),
+    });
+    expect(usagePeriodStarts(wednesday, 1).weekStart).toBe(local(5));
+  });
+
+  it("puts a Sunday at the end of a Monday-first week", () => {
+    expect(usagePeriodStarts(new Date(2026, 9, 11, 9), 1).weekStart).toBe(local(5));
+    expect(usagePeriodStarts(new Date(2026, 9, 11, 9), 7).weekStart).toBe(local(11));
   });
 });

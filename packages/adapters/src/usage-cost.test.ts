@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { catalogModels } from "./model-vision.js";
-import { summarizeBotUsage, type UsageRow, usageCostUsd } from "./usage-cost.js";
+import {
+  summarizeBotUsage,
+  summarizeUsageOverview,
+  type UsageRow,
+  usageCostUsd,
+} from "./usage-cost.js";
 
 const customPrices = new Map([["openai/gpt-6.1-sol", { input: 2, output: 10, cacheRead: 0.1 }]]);
 
@@ -90,6 +95,55 @@ describe("summarizeBotUsage", () => {
         costUsd: expect.closeTo(1.48, 10),
         unpricedTokens: 0,
         planTokens: 1_100_000,
+      },
+    ]);
+  });
+});
+
+describe("summarizeUsageOverview", () => {
+  it("totals each period from its own start and keeps per-bot spend to the week", () => {
+    const periods = {
+      monthStart: new Date("2026-10-01T05:00:00Z"),
+      weekStart: new Date("2026-10-04T05:00:00Z"),
+      dayStart: new Date("2026-10-07T05:00:00Z"),
+    };
+    const at = (iso: string, overrides: Partial<UsageRow> = {}) => ({
+      ...row(overrides),
+      createdAt: new Date(iso),
+    });
+    const overview = summarizeUsageOverview(
+      [
+        at("2026-10-07T12:00:00Z"),
+        at("2026-10-07T13:00:00Z", { botId: null }),
+        at("2026-10-07T14:00:00Z", { provider: "anthropic", model: "claude-fable-5" }),
+        at("2026-10-05T12:00:00Z", { botId: "bot-b" }),
+        at("2026-10-02T12:00:00Z"),
+      ],
+      { customPrices, subscriptionProviders: new Set(["anthropic"]) },
+      periods,
+    );
+    expect(overview.day).toEqual({
+      tokens: 3_300_000,
+      costUsd: expect.closeTo(2.96, 10),
+      unpricedTokens: 0,
+      planTokens: 1_100_000,
+    });
+    expect(overview.week).toMatchObject({ tokens: 4_400_000, costUsd: expect.closeTo(4.44, 10) });
+    expect(overview.month).toMatchObject({ tokens: 5_500_000, costUsd: expect.closeTo(5.92, 10) });
+    expect(overview.byBot).toEqual([
+      {
+        botId: "bot-a",
+        tokens: 2_200_000,
+        costUsd: expect.closeTo(1.48, 10),
+        unpricedTokens: 0,
+        planTokens: 1_100_000,
+      },
+      {
+        botId: "bot-b",
+        tokens: 1_100_000,
+        costUsd: expect.closeTo(1.48, 10),
+        unpricedTokens: 0,
+        planTokens: 0,
       },
     ]);
   });

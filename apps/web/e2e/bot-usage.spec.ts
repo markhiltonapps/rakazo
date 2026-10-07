@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, signup } from "./helpers";
 
-test("sidebar shows each bot's tokens for the last 7 days", async ({ page }, testInfo) => {
+test("sidebar shows spend for today, the week and the month, and each bot's week", async ({
+  page,
+}, testInfo) => {
   const stamp = Date.now();
   await signup(page, `usage-${stamp}@rakazo.test`, "password12", "Usage");
   await completeOnboarding(page);
@@ -13,10 +15,16 @@ test("sidebar shows each bot's tokens for the last 7 days", async ({ page }, tes
   ).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("button", { name: "Send" })).toBeVisible({ timeout: 30_000 });
 
-  // The sidebar refreshes spend once a minute; reload to read it now.
-  await page.reload();
-  const usage = page.locator("aside").getByTestId("bot-usage").first();
-  await expect(usage).toHaveText(/\d+ tokens this week/, { timeout: 20_000 });
-  await expect(usage).toHaveAttribute("title", "Last 7 days");
+  // A bot finishing its run refreshes spend without a reload.
+  const sidebar = page.locator("aside");
+  await expect(sidebar.getByTestId("bot-usage").first()).toHaveText(/\d+ tokens this week/, {
+    timeout: 20_000,
+  });
+  const spend = sidebar.getByTestId("spend-summary");
+  for (const period of ["day", "week", "month"]) {
+    await expect(spend.getByTestId(`spend-${period}`)).toHaveText(/\$\d/);
+  }
+  await expect(spend.getByText("Today", { exact: true })).toBeVisible();
+  await expect(spend.locator("[title$=' tokens']")).toHaveCount(3);
   await captureScreenshot(page, testInfo, "86-sidebar-bot-usage");
 });
