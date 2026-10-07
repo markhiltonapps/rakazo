@@ -933,6 +933,16 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
     execute: async (toolCallId, params): Promise<AgentToolResult<unknown>> => {
       host.signal.throwIfAborted();
       const args = (params ?? {}) as Record<string, unknown>;
+      if (tool.name === "suggest_reply") {
+        // Not a tool step the person should see: it only annotates the reply just written.
+        const reply = String(args.reply ?? "").trim();
+        if (reply) host.queue.push({ type: "suggested_reply", text: reply });
+        return {
+          content: [{ type: "text", text: "Suggested reply saved." }],
+          details: { reply },
+          terminate: true,
+        };
+      }
       const executionId =
         toolCallId || `${host.request.runId}:${tool.name}:${host.toolCallSeq.value++}`;
       if (!beginToolCall(host)) {
@@ -1110,8 +1120,9 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
   }
   const subagentModel = modelForCompletion(selectedModel.model, requestModel.maxTokens);
 
+  // A subagent's reply goes to its parent, never to the person's message box.
   const childDefs = (host.request.tools.length ? host.request.tools : builtinAgentTools).filter(
-    (tool) => !DELEGATION_TOOL_NAMES.has(tool.name),
+    (tool) => !DELEGATION_TOOL_NAMES.has(tool.name) && tool.name !== "suggest_reply",
   );
   const nestedHost: ToolHost = {
     ...host,

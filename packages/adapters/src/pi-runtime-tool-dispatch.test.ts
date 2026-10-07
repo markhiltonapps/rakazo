@@ -1372,6 +1372,46 @@ describe("Pi connector tool dispatch", () => {
     });
   });
 
+  it("ends the turn on suggest_reply without a visible tool step", async () => {
+    fakeAgentState.invoke = { name: "suggest_reply", args: { reply: "  Thursday works.  " } };
+    const executeTool = vi.fn(async () => ({ ok: true }));
+    const runtime = new PiAgentRuntime();
+    const events: unknown[] = [];
+    for await (const event of runtime.run(
+      {
+        botId: "b",
+        threadId: "t",
+        runId: "suggest",
+        prompt: "plan the review",
+        instructions: "Ask which day works.",
+        history: [],
+        tools: [
+          {
+            name: "suggest_reply",
+            description: "Suggest the user's reply",
+            inputSchema: { type: "object", properties: { reply: { type: "string" } } },
+          },
+        ],
+        model: { provider: "test", id: "dispatch-test-model" },
+        executeTool,
+      },
+      {
+        operationId: "suggest",
+        traceId: "2s",
+        spaceId: "w",
+        userId: "u",
+        signal: new AbortController().signal,
+      },
+    )) {
+      events.push(event);
+    }
+
+    expect(executeTool).not.toHaveBeenCalled();
+    expect(events).toContainEqual({ type: "suggested_reply", text: "Thursday works." });
+    expect(events).not.toContainEqual(expect.objectContaining({ type: "tool" }));
+    expect(fakeAgentState.toolResult).toMatchObject({ terminate: true });
+  });
+
   it("clips structured tool results to one aggregate text budget", async () => {
     const first = "a".repeat(TOOL_RESULT_TEXT_LIMIT - 5);
     const image = { type: "image" as const, data: "iVBORw0KGgo=", mimeType: "image/png" as const };

@@ -350,6 +350,7 @@ import {
   isProgressMessageTruncated,
   isUserProgressClientNonce,
   userProgressClientNonce,
+  withSuggestedReply,
 } from "./user-progress.js";
 import { createWebProvider } from "./web-provider-factory.js";
 import { webFetchFromTool, webSearchFromTool } from "./web-tools.js";
@@ -1744,6 +1745,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
         let assembled = "";
         let currentTextSegment = "";
         let messageSegments: MessageBlock[] = [];
+        // Holds only while nothing follows it: later text or tools mean the question moved on.
+        let suggestedReply: string | undefined;
         // Terminal subagent rows are published as their own messages (not appended to
         // messageSegments). Treat that like tool/step durable activity so we do not invent
         // an empty-run "done." completion afterward.
@@ -4277,6 +4280,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
 
             if (event.type === "text") {
+              if (event.text.trim()) suggestedReply = undefined;
               assembled += event.text;
               currentTextSegment += event.text;
               toolCallStreak = { key: undefined, count: 0 };
@@ -4409,7 +4413,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 threadId: thread.id,
               });
               return;
+            } else if (event.type === "suggested_reply") {
+              suggestedReply = event.text;
             } else if (event.type === "tool") {
+              suggestedReply = undefined;
               // Preserve event ordering when the throttle still holds recent narration: the
               // client must see that text before the tool call it describes.
               await flushProgress();
@@ -4647,9 +4654,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
           const blocks = handedOff
             ? []
-            : finalBlocksAfterMidTurnProgress(
-                redactBlocks(completionBlocks, runSecrets),
-                publishedMidTurnUserMessage || runAllowsSilentEmpty(run.trigger),
+            : withSuggestedReply(
+                finalBlocksAfterMidTurnProgress(
+                  redactBlocks(completionBlocks, runSecrets),
+                  publishedMidTurnUserMessage || runAllowsSilentEmpty(run.trigger),
+                ),
+                suggestedReply === undefined || containsSecret(suggestedReply, runSecrets)
+                  ? undefined
+                  : suggestedReply,
               );
           const text = handedOff
             ? ""
@@ -5010,6 +5022,8 @@ export function selectBuiltinToolsForRun(options: {
   ).filter(
     (tool) =>
       (options.voiceCall || tool.name !== "end_call") &&
+      // A call or an outside chat app has no message box to put a suggestion in.
+      (!(options.voiceCall || options.messagingChannelRun) || tool.name !== "suggest_reply") &&
       (!options.messagingChannelRun ||
         (!["remember", "save_memory", "recall_memory", "forget_memory", "task_catalog"].includes(
           tool.name,

@@ -1,4 +1,5 @@
 import type { MessageBlock } from "@rakazo/contracts";
+import { SUGGESTED_REPLY_MAX_LENGTH } from "@rakazo/contracts";
 import { isToolActivityBlock } from "@rakazo/core";
 
 /** Keep mid-turn progress beats short; prefer a few high-signal updates. */
@@ -67,6 +68,23 @@ export function finalBlocksAfterMidTurnProgress(
   if (!publishedMidTurn || blocks.length === 0) return blocks;
   if (blocks.every((block) => isToolActivityBlock(block))) return [];
   return blocks;
+}
+
+/**
+ * Put the bot's suggested reply on the text that ends its final message, the question it
+ * answers. Without such text (only tool activity, or nothing) there is no question to answer.
+ */
+export function withSuggestedReply(
+  blocks: MessageBlock[],
+  reply: string | undefined,
+): MessageBlock[] {
+  const suggestion = reply?.trim().slice(0, SUGGESTED_REPLY_MAX_LENGTH);
+  const index = blocks.findLastIndex((block) => !isToolActivityBlock(block));
+  const block = blocks[index];
+  if (!suggestion || block?.kind !== "text" || !block.text.trim()) return blocks;
+  return blocks.map((current, at) =>
+    at === index ? { ...block, suggestedReply: suggestion } : current,
+  );
 }
 
 /** Outcome to return for a bot_message run after mid-turn progress posts. */

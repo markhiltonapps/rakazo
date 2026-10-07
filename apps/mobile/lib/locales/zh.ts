@@ -626,6 +626,7 @@ export const ZH_MESSAGES: Record<string, string> = {
     "等待登录——链接将在约 {minutes} 分钟后过期。",
   "On a call with {name}": "正在与 {name} 通话",
   Call: "通话",
+  "Use suggested reply": "使用建议回复",
   Settings: "设置",
   Transcript: "字幕",
   Mute: "静音",

@@ -355,6 +355,21 @@ describe("run tool selection", () => {
     expect(toolNames("call_end")).not.toContain("end_call");
   });
 
+  it("offers suggest_reply only where there is a message box to fill", () => {
+    const names = (voiceCall: boolean, messagingChannelRun: boolean) =>
+      selectBuiltinToolsForRun({
+        graphicalToolsAllowed: true,
+        groupId: null,
+        trigger: "user",
+        semanticMemoryEnabled: false,
+        messagingChannelRun,
+        voiceCall,
+      }).map((tool) => tool.name);
+    expect(names(false, false)).toContain("suggest_reply");
+    expect(names(true, false)).not.toContain("suggest_reply");
+    expect(names(false, true)).not.toContain("suggest_reply");
+  });
+
   it("keeps schedule tools in group chats and still blocks create on routines", () => {
     expect(toolNames("user", "group-1")).toEqual(
       expect.arrayContaining(["schedule_create", "schedule_list", "schedule_cancel"]),

@@ -92,8 +92,16 @@ const ChartBlock = z
 export const SecretAskPurpose = z.enum(["otp", "password", "api_key"]);
 export type SecretAskPurpose = z.infer<typeof SecretAskPurpose>;
 
+/** Longest reply a bot may suggest for the person to send back. */
+export const SUGGESTED_REPLY_MAX_LENGTH = 200;
+
 export const MessageBlock = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("text"), text: z.string() }),
+  z.object({
+    kind: z.literal("text"),
+    text: z.string(),
+    /** The reply the person would most likely send to a question ending this text. */
+    suggestedReply: z.string().max(SUGGESTED_REPLY_MAX_LENGTH).optional(),
+  }),
   z.object({
     kind: z.literal("card"),
     lines: z.array(z.object({ k: z.string(), v: z.string() })),

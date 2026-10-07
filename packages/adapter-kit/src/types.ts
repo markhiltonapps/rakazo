@@ -460,6 +460,7 @@ export interface ScriptedTurn {
   assistant?: string;
   toolCalls?: Array<{ name: string; args: Record<string, unknown> }>;
   ask?: { text: string; detail?: string; actions?: Array<{ id: string; label: string }> };
+  suggestedReply?: string;
   takeover?: { reason: string };
   files?: Array<{ path: string; content: string }>;
   memory?: Array<{ scope: "bot" | "user"; path: string; content: string }>;
@@ -482,6 +483,8 @@ export type AgentRuntimeEvent =
       actions?: Array<{ id: string; label: string }>;
     }
   | { type: "takeover"; reason: string }
+  /** The reply the person would most likely send to the question that ends this turn. */
+  | { type: "suggested_reply"; text: string }
   | {
       type: "usage";
       inputTokens: number;
