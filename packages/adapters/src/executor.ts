@@ -4382,7 +4382,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
               await publishMessage(deps, run, "bot", [
                 { kind: "computer", state: "Needs you", text: safeReason },
               ]);
-              await workspaceCheckpoint.flushOrLog();
+              // No workspace save here: a save marks the computer as suspending, which locks
+              // the person out of the screen they were just asked to use. The computer keeps
+              // its files, and the save runs when the turn ends or the computer goes idle.
               if (!(await holdComputerExecutionLeaseForTakeover(deps.prisma, computerLease))) {
                 throw new Error("Computer lease expired before takeover");
               }
