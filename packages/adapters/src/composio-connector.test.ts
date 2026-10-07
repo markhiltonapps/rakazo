@@ -8,6 +8,7 @@ import {
   CompositeConnector,
   collectLogIds,
   collectPages,
+  composioCallShape,
   executeSessionKey,
   filterCatalog,
   isComposioEnabled,
@@ -126,6 +127,34 @@ vi.mock("@composio/core", () => ({
     }
   },
 }));
+
+describe("composioCallShape", () => {
+  it("names the tools and argument keys of a call without their values", () => {
+    expect(
+      composioCallShape({
+        tool: "COMPOSIO_MULTI_EXECUTE_TOOL",
+        executionId: "call-1",
+        args: {
+          tools: [
+            {
+              tool_slug: "GMAIL_FETCH_EMAILS",
+              arguments: { query: "in:sent after:2026/08/08", max_results: 20 },
+            },
+            { tool_slug: "OUTLOOK_LIST_MESSAGES", arguments: {} },
+          ],
+          sync_response_to_workbench: false,
+        },
+      }),
+    ).toBe("GMAIL_FETCH_EMAILS(max_results,query) OUTLOOK_LIST_MESSAGES()");
+    expect(
+      composioCallShape({
+        tool: "COMPOSIO_SEARCH_TOOLS",
+        executionId: "call-2",
+        args: { queries: ["sent mail"] },
+      }),
+    ).toBe("COMPOSIO_SEARCH_TOOLS(queries)");
+  });
+});
 
 describe("composio tool mapping", () => {
   it("maps OpenAI-style session tools and raw slugs", () => {
