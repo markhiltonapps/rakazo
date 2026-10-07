@@ -122,6 +122,29 @@ export function AskCard({
         <div className="mt-3.5 text-[13.5px] font-medium text-muted-foreground">
           <Trans>No longer active</Trans>
         </div>
+      ) : askActions?.length && !approvalActions ? (
+        // Choices share the onboarding picker's look so they read as buttons in both themes.
+        <div className="mt-3.5 space-y-1.5">
+          {askActions.map((action, index) => (
+            <button
+              key={action.id}
+              type="button"
+              disabled={submitting}
+              onClick={() => void submitAnswer(action.id)}
+              className="flex w-full items-start gap-3 rounded-xl bg-muted px-3.5 py-3 text-start text-foreground transition-colors hover:bg-accent disabled:opacity-60"
+            >
+              <span
+                aria-hidden="true"
+                className="mt-px grid size-6 shrink-0 place-items-center rounded-[7px] bg-background text-[12.5px] font-medium text-foreground/75"
+              >
+                {String.fromCharCode(65 + index)}
+              </span>
+              <span className="flex-1 text-[14.5px] leading-[1.4]">
+                {pendingAction === action.id ? <Trans>Sending…</Trans> : action.label}
+              </span>
+            </button>
+          ))}
+        </div>
       ) : askActions?.length ? (
         <div className="mt-3.5 space-y-1.5">
           {askActions.map((action) => (
