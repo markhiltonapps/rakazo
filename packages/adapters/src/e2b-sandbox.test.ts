@@ -370,6 +370,48 @@ describe("E2B computer backend", () => {
     );
   });
 
+  it("serves the phone-ready viewer, and stock noVNC when it cannot be installed", async () => {
+    const respond = desktopCommandResponder();
+    let installs = 0;
+    let installFails = true;
+    const command = vi.fn(async (value: string) => {
+      if (value.includes("mobile-keyboard.js")) {
+        installs += 1;
+        return {
+          stdout: "",
+          stderr: "sudo: a password is required",
+          exitCode: installFails ? 1 : 0,
+        };
+      }
+      return respond(value) ?? { stdout: "", stderr: "", exitCode: 0 };
+    });
+    const desktop = {
+      sandboxId: "e2b-viewer-box",
+      display: ":0",
+      commands: { run: command },
+      files: { makeDir: vi.fn(async () => undefined) },
+      getHost: (port: number) => `${port}-e2b-viewer-box.e2b.test`,
+    } as unknown as Sandbox;
+    const provider = new E2BSandboxProvider("test-key", {
+      create: vi.fn(async () => desktop),
+      connect: vi.fn(async () => desktop),
+      pause: vi.fn(async () => undefined),
+    });
+    const computer = await provider.provision(
+      { botId: "bot-1", homePath: "/unused", providerKind: "e2b" },
+      context,
+    );
+    const page = async () =>
+      new URL((await provider.connectScreen(computer, { view: "stream" }, context)).url!).pathname;
+
+    expect(await page()).toBe("/vnc.html");
+    installFails = false;
+    const [first, second] = await Promise.all([page(), page()]);
+    expect([first, second]).toEqual(["/embed.html", "/embed.html"]);
+    expect(await page()).toBe("/embed.html");
+    expect(installs).toBe(2);
+  });
+
   it("opens a terminal in the workspace root or the Team bot folder", async () => {
     const respond = desktopCommandResponder();
     const command = vi.fn(
@@ -393,7 +435,7 @@ describe("E2B computer backend", () => {
     );
 
     const root = await provider.connectTerminal(computer, { controlToken: "lease-1" }, context);
-    expect(command).toHaveBeenLastCalledWith(
+    expect(command).toHaveBeenCalledWith(
       expect.stringContaining("/home/user/rakazo-home"),
       expect.anything(),
     );

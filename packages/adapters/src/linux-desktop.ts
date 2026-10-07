@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import type {
   AdapterContext,
   ComputerAction,
@@ -18,6 +19,7 @@ import {
   desktopTerminalCommand,
   desktopUrl,
   managedDesktopCommand,
+  NOVNC_WEB_ROOT_COMMAND,
   releaseDesktopCommand,
   screenPorts,
   shellQuote,
@@ -253,3 +255,34 @@ export const PREPARE_LINUX_DESKTOP = [
   "  $root apt-get update -qq && $root env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $missing",
   "fi",
 ].join("\n");
+
+/** The computer image's viewer: noVNC plus the phone keyboard, trackpad and paste. */
+export const VIEWER_PAGE = "embed.html";
+const VIEWER_FILES = ["clipboard-bridge.js", "mobile-keyboard.js", VIEWER_PAGE] as const;
+let viewerCommand: Promise<string> | undefined;
+
+/**
+ * Copy the computer image's viewer next to a provider image's stock noVNC, which has no way
+ * to type from a phone.
+ */
+export function installViewerCommand(): Promise<string> {
+  viewerCommand ??= Promise.all(
+    VIEWER_FILES.map(async (name) => {
+      const source = new URL(`../../../infra/sandboxes/computer/${name}`, import.meta.url);
+      const content = (await readFile(source)).toString("base64");
+      return `printf %s '${content}' | base64 -d >"$staging/${name}"`;
+    }),
+  ).then((writes) =>
+    [
+      "set -eu",
+      NOVNC_WEB_ROOT_COMMAND,
+      "staging=$(mktemp -d)",
+      "trap 'rm -rf \"$staging\"' EXIT",
+      ...writes,
+      'if [ -w "$web" ]; then root=""; else root="sudo -n"; fi',
+      // The page goes last, so it never loads before its scripts are in place.
+      `$root install -m 644 ${VIEWER_FILES.map((name) => `"$staging/${name}"`).join(" ")} "$web/"`,
+    ].join("\n"),
+  );
+  return viewerCommand;
+}

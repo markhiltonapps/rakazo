@@ -16,13 +16,19 @@ import type {
   TerminalRequest,
 } from "@rakazo/adapter-kit";
 import { boundedSandboxCommandTimeoutMs } from "@rakazo/core";
+import { getLogger } from "@rakazo/logging";
 import { sandboxIdleMs } from "./computer-idle.js";
 import { normalizeWorkspacePath, shellQuote, workspacePath } from "./computer-support.js";
 import {
   PORTABLE_TRANSFER_BATCH_BYTES,
   shouldSkipPortableWorkspaceFile,
 } from "./computer-workspace.js";
-import { LinuxDesktop, PREPARE_LINUX_DESKTOP } from "./linux-desktop.js";
+import {
+  installViewerCommand,
+  LinuxDesktop,
+  PREPARE_LINUX_DESKTOP,
+  VIEWER_PAGE,
+} from "./linux-desktop.js";
 
 const E2B_WORKSPACE = "/home/user/rakazo-home";
 const E2B_BROWSER_PROFILES = `${E2B_WORKSPACE}/.browser-profiles`;
@@ -78,10 +84,14 @@ export class E2BSandboxProvider implements SandboxProvider {
       const result = await this.runSetupCommand(await this.box(computer), command, context.signal);
       return { code: result.exitCode, stdout: result.stdout, stderr: result.stderr };
     },
-    screenUrl: async (computer, port) =>
-      `https://${(await this.box(computer)).getHost(port)}/vnc.html`,
+    screenUrl: async (computer, port, context) => {
+      const desktop = await this.box(computer);
+      const page = (await this.viewerReady(desktop, context.signal)) ? VIEWER_PAGE : "vnc.html";
+      return `https://${desktop.getHost(port)}/${page}`;
+    },
   });
   private readonly boxes = new Map<string, Sandbox>();
+  private readonly viewers = new Map<string, Promise<boolean>>();
   private readonly connections = new Map<string, Promise<Sandbox>>();
   private readonly lastTouchedAt = new Map<string, number>();
 
@@ -393,6 +403,33 @@ export class E2BSandboxProvider implements SandboxProvider {
     this.boxes.delete(id);
     this.connections.delete(id);
     this.lastTouchedAt.delete(id);
+    this.viewers.delete(id);
+  }
+
+  /** Install the phone-ready viewer once per sandbox; stock noVNC stays the fallback. */
+  private viewerReady(desktop: Sandbox, signal: AbortSignal): Promise<boolean> {
+    const id = desktop.sandboxId;
+    const known = this.viewers.get(id);
+    if (known) return known;
+    const ready = installViewerCommand()
+      .then((command) => this.runSetupCommand(desktop, command, signal))
+      .then(
+        (result) => {
+          if (result.exitCode === 0) return true;
+          getLogger().warn("computer viewer install failed", { error: result.stderr });
+          return false;
+        },
+        (error: unknown) => {
+          getLogger().warn("computer viewer install failed", { error: errorMessage(error) });
+          return false;
+        },
+      );
+    this.viewers.set(id, ready);
+    // A failed install is retried on the next screen instead of sticking to the stock viewer.
+    void ready.then((installed) => {
+      if (!installed && this.viewers.get(id) === ready) this.viewers.delete(id);
+    });
+    return ready;
   }
 
   /** Apply the deployment timeout (SDK default is 60s) and return failed results instead of throwing. */
