@@ -465,10 +465,14 @@ export function prepareBrowserProfileCommand(screenId: string, env = DEFAULT_DES
   return `mkdir -p ${shellQuote(browserProfilePathForScreen(screenId, env))}`;
 }
 
+/** Sets `web` to the noVNC directory the screen gateway serves. */
+export const NOVNC_WEB_ROOT_COMMAND =
+  'if [ -d /usr/share/novnc ]; then web=/usr/share/novnc; elif [ -d /opt/noVNC ]; then web=/opt/noVNC; else echo "noVNC is required" >&2; exit 1; fi';
+
 function proxyEnvironmentCommand() {
   return [
     'if command -v websockify >/dev/null 2>&1; then proxy=$(command -v websockify); elif [ -x /opt/noVNC/utils/websockify/run ]; then proxy=/opt/noVNC/utils/websockify/run; else echo "websockify is required" >&2; exit 1; fi',
-    'if [ -d /usr/share/novnc ]; then web=/usr/share/novnc; elif [ -d /opt/noVNC ]; then web=/opt/noVNC; else echo "noVNC is required" >&2; exit 1; fi',
+    NOVNC_WEB_ROOT_COMMAND,
   ].join("\n");
 }
 
