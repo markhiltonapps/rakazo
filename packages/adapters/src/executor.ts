@@ -4283,7 +4283,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
 
             if (event.type === "text") {
-              if (event.text.trim()) suggestedReply = undefined;
+              if (event.text.trim() && suggestedReply !== undefined) {
+                getLogger().info("run.suggested_reply.dropped");
+                suggestedReply = undefined;
+              }
               assembled += event.text;
               currentTextSegment += event.text;
               toolCallStreak = { key: undefined, count: 0 };
@@ -4419,7 +4422,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
             } else if (event.type === "suggested_reply") {
               suggestedReply = event.text;
             } else if (event.type === "tool") {
-              suggestedReply = undefined;
+              if (suggestedReply !== undefined) {
+                getLogger().info("run.suggested_reply.dropped");
+                suggestedReply = undefined;
+              }
               // Preserve event ordering when the throttle still holds recent narration: the
               // client must see that text before the tool call it describes.
               await flushProgress();
