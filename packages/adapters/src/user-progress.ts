@@ -87,6 +87,16 @@ export function withSuggestedReply(
   );
 }
 
+/**
+ * The text that ends a final message when it asks the person something and carries no
+ * suggestion yet, so a background step can draft one.
+ */
+export function questionAwaitingSuggestion(blocks: readonly MessageBlock[]): string | undefined {
+  const block = blocks.findLast((candidate) => !isToolActivityBlock(candidate));
+  if (block?.kind !== "text" || block.suggestedReply || !block.text.includes("?")) return undefined;
+  return block.text;
+}
+
 /** Outcome to return for a bot_message run after mid-turn progress posts. */
 export function botMessageOutcomeFromMidTurn(
   finalText: string,
