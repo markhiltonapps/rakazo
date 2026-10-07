@@ -140,12 +140,12 @@ describe("composioCallShape", () => {
               tool_slug: "GMAIL_FETCH_EMAILS",
               arguments: { query: "in:sent after:2026/08/08", max_results: 20 },
             },
-            { tool_slug: "OUTLOOK_LIST_MESSAGES", arguments: {} },
+            { tool_slug: "OUTLOOK_LIST_MESSAGES", arguments: {}, folder: "sentitems" },
           ],
           sync_response_to_workbench: false,
         },
       }),
-    ).toBe("GMAIL_FETCH_EMAILS(max_results,query) OUTLOOK_LIST_MESSAGES()");
+    ).toBe("GMAIL_FETCH_EMAILS(max_results,query) OUTLOOK_LIST_MESSAGES()+{folder}");
     expect(
       composioCallShape({
         tool: "COMPOSIO_SEARCH_TOOLS",

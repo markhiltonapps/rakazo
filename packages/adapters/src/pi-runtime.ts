@@ -1601,6 +1601,18 @@ export function jsonSchemaParameters(
     return Type.Object(fields, { ...options, additionalProperties: jsonField(additional) });
   }
   if (additional === true || schema.properties == null) {
+    // With no fields to list, even an open `properties: {}` still led models to send `{}`.
+    // Leave it out, and keep the schema's examples: they are all a model has to go on.
+    if (Object.keys(fields).length === 0) {
+      return Type.Unsafe<Record<string, unknown>>({
+        type: "object",
+        additionalProperties: true,
+        ...options,
+        ...(Array.isArray(schema.examples) && schema.examples.length > 0
+          ? { examples: schema.examples }
+          : {}),
+      }) as unknown as ReturnType<typeof Type.Object>;
+    }
     return Type.Object(fields, { ...options, additionalProperties: true });
   }
   return Type.Object(fields, options);
