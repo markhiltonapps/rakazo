@@ -17,6 +17,53 @@ export function clipToolResultText(text: string, limit: number = TOOL_RESULT_TEX
   return text.length > limit ? `${text.slice(0, limit)}…` : text;
 }
 
+/** Tried in order until a shortened JSON result fits: cap long text, then long lists. */
+const JSON_FIT_ROUNDS = [
+  { text: 2_000, items: 50 },
+  { text: 500, items: 20 },
+  { text: 200, items: 10 },
+  { text: 80, items: 5 },
+] as const;
+
+/** Pagination values stop working when cut, so they are kept whole. */
+const UNCUT_KEY = /token|cursor|next/i;
+
+/**
+ * Fit a structured tool result into the budget by trimming long text and long lists, so every
+ * field name, date, id and next-page token survives. A blind cut kept only the first item of a
+ * mail search, with no sign that anything was missing.
+ */
+export function fitToolResultJson(value: unknown, limit: number = TOOL_RESULT_TEXT_LIMIT): string {
+  const full = JSON.stringify(value);
+  if (full === undefined || full.length <= limit) return full ?? "";
+  const note = `\n[Shortened from ${full.length} characters: long text and extra list items were cut. Ask for fewer items or fields, or use the next-page token, to see the rest.]`;
+  let text = full;
+  for (const round of JSON_FIT_ROUNDS) {
+    text = JSON.stringify(shrinkJson(value, round));
+    if (text.length + note.length <= limit) return text + note;
+  }
+  // The cut adds one character, so leave room for it.
+  return clipToolResultText(text, Math.max(0, limit - note.length - 1)) + note;
+}
+
+function shrinkJson(value: unknown, round: (typeof JSON_FIT_ROUNDS)[number], key = ""): unknown {
+  if (typeof value === "string") {
+    return value.length > round.text && !UNCUT_KEY.test(key)
+      ? `${value.slice(0, round.text)}…`
+      : value;
+  }
+  if (Array.isArray(value)) {
+    const kept = value.slice(0, round.items).map((item) => shrinkJson(item, round, key));
+    return value.length > round.items ? [...kept, `… ${value.length - round.items} more`] : kept;
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([name, item]) => [name, shrinkJson(item, round, name)]),
+    );
+  }
+  return value;
+}
+
 /**
  * Share one remaining character budget across all text parts.
  * Later text is omitted once the aggregate limit is exhausted; non-text parts stay.

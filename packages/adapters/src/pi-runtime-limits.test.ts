@@ -4,6 +4,7 @@ import {
   billedPromptTokens,
   clipToolResultContent,
   clipToolResultText,
+  fitToolResultJson,
   REASONING_MODEL_MAX_TOKENS,
   resolveCompletionMaxTokens,
   TOOL_RESULT_TEXT_LIMIT,
@@ -133,5 +134,54 @@ describe("clipToolResultContent", () => {
       .filter((part) => part.type === "text")
       .reduce((sum, part) => sum + part.text.replace(/…$/, "").length, 0);
     expect(textChars).toBe(TOOL_RESULT_TEXT_LIMIT);
+  });
+});
+
+describe("fitToolResultJson", () => {
+  const mailbox = {
+    data: {
+      messages: Array.from({ length: 40 }, (_, index) => ({
+        messageId: `m${index}`,
+        messageTimestamp: `2026-09-${String((index % 28) + 1).padStart(2, "0")}T10:00:00Z`,
+        subject: `Subject ${index}`,
+        labelIds: ["SENT"],
+        messageText: "Long body text. ".repeat(400),
+        payload: { parts: [{ body: { data: "QUJD".repeat(2_000) } }] },
+      })),
+      nextPageToken: "t".repeat(400),
+      resultSizeEstimate: 200,
+    },
+    logId: "log_1",
+  };
+
+  it("returns small results unchanged", () => {
+    expect(fitToolResultJson({ ok: true, items: [1, 2] })).toBe('{"ok":true,"items":[1,2]}');
+  });
+
+  it("keeps dates, ids, counts and the next-page token when shortening a large result", () => {
+    const text = fitToolResultJson(mailbox);
+    expect(text.length).toBeLessThanOrEqual(TOOL_RESULT_TEXT_LIMIT);
+    const [json, note] = text.split("\n[Shortened from ");
+    const fitted = JSON.parse(json!);
+    expect(fitted.data.nextPageToken).toBe(mailbox.data.nextPageToken);
+    expect(fitted.data.resultSizeEstimate).toBe(200);
+    expect(fitted.logId).toBe("log_1");
+    expect(fitted.data.messages[0]).toMatchObject({
+      messageId: "m0",
+      messageTimestamp: "2026-09-01T10:00:00Z",
+      subject: "Subject 0",
+      labelIds: ["SENT"],
+    });
+    expect(fitted.data.messages.at(-1)).toMatch(/^… \d+ more$/);
+    expect(note).toMatch(/^\d+ characters: .*next-page token/);
+  });
+
+  it("stays within the limit when no shortening round fits", () => {
+    const wide = Object.fromEntries(
+      Array.from({ length: 2_000 }, (_, index) => [`field${index}`, index]),
+    );
+    const text = fitToolResultJson(wide);
+    expect(text.length).toBeLessThanOrEqual(TOOL_RESULT_TEXT_LIMIT);
+    expect(text).toContain("[Shortened from ");
   });
 });

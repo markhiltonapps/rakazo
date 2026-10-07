@@ -52,6 +52,7 @@ import {
   billedPromptTokens,
   clipToolResultContent,
   clipToolResultText,
+  fitToolResultJson,
   MODEL_STREAM_IDLE_TIMEOUT_MS,
   MODEL_STREAM_MAX_RETRIES,
   MODEL_STREAM_TIMEOUT_MS,
@@ -1702,9 +1703,7 @@ export function jsonField(spec: unknown): ReturnType<typeof Type.String> {
 
 function summarizeToolResult(result: unknown) {
   try {
-    const text = JSON.stringify(result);
-    if (!text) return "ok";
-    return clipToolResultText(text);
+    return fitToolResultJson(result) || "ok";
   } catch {
     return "ok";
   }
