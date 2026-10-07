@@ -24,6 +24,7 @@ import {
   isSecretAskBlock,
   latestAnswerableAskMessageId,
   mentionChipKey,
+  pendingSuggestedReply,
   plainTextFromMarkdown,
   projectMessageReactions,
   resolveComposerSendPlan,
@@ -1119,6 +1120,11 @@ function Thread() {
     });
   }
 
+  const suggestedReply =
+    !working && draft.length === 0 && selectedSkill === null && selectedMentions.length === 0
+      ? pendingSuggestedReply(visibleMessages)
+      : undefined;
+
   const canSend =
     Boolean(draft.trim()) ||
     selectedSkill !== null ||
@@ -2151,9 +2157,8 @@ function Thread() {
               placeholder={
                 selectedSkill || selectedMentions.length
                   ? undefined
-                  : displayName
-                    ? t("Message {name}", { name: displayName })
-                    : t("Message…")
+                  : (suggestedReply ??
+                    (displayName ? t("Message {name}", { name: displayName }) : t("Message…")))
               }
               placeholderTextColor={tokens.mutedForeground}
               keyboardAppearance={colorScheme}
@@ -2171,6 +2176,26 @@ function Thread() {
               }}
             />
           </View>
+          {suggestedReply ? (
+            <Pressable
+              accessibilityLabel={t("Use suggested reply")}
+              onPress={() => updateDraft(suggestedReply)}
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <NativeSymbol
+                ios="arrow.right"
+                android="arrow-forward"
+                size={18}
+                color={tokens.mutedForeground}
+              />
+            </Pressable>
+          ) : null}
           {botId && !onCall && draft.trim().length === 0 ? (
             <Pressable
               accessibilityLabel={t("Call")}

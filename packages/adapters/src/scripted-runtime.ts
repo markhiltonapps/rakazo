@@ -56,6 +56,9 @@ export class ScriptedAgentRuntime implements AgentRuntime {
           yield { type: "progress", text: "working…", activity: true };
           yield { type: "text", text: turn.assistant };
         }
+        if (turn.suggestedReply) {
+          yield { type: "suggested_reply", text: turn.suggestedReply };
+        }
         for (const call of turn.toolCalls ?? []) {
           const executionId = `${request.runId}:${call.name}:${toolCallSeq++}`;
           if (call.name === "run_subagent") {
@@ -203,6 +206,15 @@ export function inferScript(
             },
           },
         ],
+        complete: true,
+      },
+    ];
+  }
+  if (lower.includes("ask me which day")) {
+    return [
+      {
+        assistant: "happy to set that up. which day works best for the review?",
+        suggestedReply: "Thursday afternoon works for me.",
         complete: true,
       },
     ];

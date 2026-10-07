@@ -643,6 +643,7 @@ export const DE_MESSAGES: Record<string, string> = {
   "Allow speech recognition in Settings, or connect ElevenLabs, OpenAI, or Fish Audio.":
     "Erlaube die Spracherkennung in den Einstellungen oder verbinde ElevenLabs, OpenAI oder Fish Audio.",
   Call: "Anrufen",
+  "Use suggested reply": "Vorgeschlagene Antwort verwenden",
   "Calls need transcription": "Anrufe brauchen eine Transkription",
   "Could not hear that.": "Das war nicht zu verstehen.",
   "Could not speak that.": "Das konnte nicht vorgelesen werden.",

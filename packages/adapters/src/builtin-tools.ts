@@ -4,6 +4,7 @@ import {
   botSecretDestinationSchema,
   SecretAskPurpose,
   SecretHttpRequest,
+  SUGGESTED_REPLY_MAX_LENGTH,
 } from "@rakazo/contracts";
 import { z } from "zod";
 import { allowPrivateHttpSecretOrigins } from "./bot-secrets.js";
@@ -340,6 +341,18 @@ export const builtinAgentTools: ConnectorTool[] = [
         },
       },
       required: ["question", "options"],
+    },
+  },
+  {
+    name: "suggest_reply",
+    description:
+      "When your reply ends with a question the user will answer in their own words, call this in the same message, after the question, with the reply they would most likely send. It is shown in their message box to accept or ignore, and it ends your turn. Write it as the user, briefly. Skip it when there is no question or when ask_user fits.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        reply: { type: "string", minLength: 1, maxLength: SUGGESTED_REPLY_MAX_LENGTH },
+      },
+      required: ["reply"],
     },
   },
   {

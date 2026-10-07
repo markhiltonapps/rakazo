@@ -10,6 +10,7 @@ import {
   isUserProgressClientNonce,
   USER_PROGRESS_MESSAGE_MAX_LENGTH,
   userProgressClientNonce,
+  withSuggestedReply,
 } from "./user-progress.js";
 
 describe("clampUserProgressMessage", () => {
@@ -100,5 +101,23 @@ describe("userProgressClientNonce", () => {
     expect(userProgressClientNonce("run-1", 0)).not.toBe(nonce);
     expect(isUserProgressClientNonce(null)).toBe(false);
     expect(isUserProgressClientNonce("other")).toBe(false);
+  });
+});
+
+describe("withSuggestedReply", () => {
+  const question: MessageBlock = { kind: "text", text: "Which day works?" };
+
+  it("puts the suggestion on the text that ends the reply", () => {
+    expect(withSuggestedReply([question], "  Thursday works.  ")).toEqual([
+      { ...question, suggestedReply: "Thursday works." },
+    ]);
+  });
+
+  it("leaves replies without a closing question untouched", () => {
+    const card: MessageBlock = { kind: "card", lines: [{ k: "Status", v: "Done" }] };
+    expect(withSuggestedReply([question, card], "Thursday")).toEqual([question, card]);
+    expect(withSuggestedReply([], "Thursday")).toEqual([]);
+    expect(withSuggestedReply([question], undefined)).toEqual([question]);
+    expect(withSuggestedReply([question], "   ")).toEqual([question]);
   });
 });

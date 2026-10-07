@@ -48,6 +48,7 @@ import {
   latestAnswerableAskMessageId,
   mentionChipKey,
   nestRosterByParent,
+  pendingSuggestedReply,
   plainTextFromMarkdown,
   projectMessageReactions,
   reorderBotTo,
@@ -84,6 +85,7 @@ import {
 } from "@rakazo/ui-web";
 import {
   ArrowDown,
+  ArrowRight,
   ArrowUp,
   Bell,
   Box,
@@ -1813,6 +1815,10 @@ export function ShellPage() {
   const transcriptMessages = useMemo(
     () => userVisibleMessages(activeSnapshot?.messages ?? [], { includePeerReceipts: true }),
     [activeSnapshot?.messages],
+  );
+  const suggestedReply = useMemo(
+    () => pendingSuggestedReply(transcriptMessages),
+    [transcriptMessages],
   );
   const transcriptArtifactTarget = useMemo<ArtifactTarget>(
     () => (inGroup ? { groupId: groupId ?? "" } : { botId: active?.id ?? "" }),
@@ -3634,6 +3640,7 @@ export function ShellPage() {
             onRemoveAttachment={removeAttachment}
             onSend={sendMessage}
             onStop={stopRun}
+            suggestedReply={suggestedReply}
             onVoice={
               !inGroup && active
                 ? () => {
@@ -5207,6 +5214,7 @@ const Composer = memo(function Composer({
   onRemoveAttachment,
   onSend,
   onStop,
+  suggestedReply,
   onVoice,
   replyTarget,
   replyQuote,
@@ -5233,6 +5241,8 @@ const Composer = memo(function Composer({
   onRemoveAttachment: (attachment: PendingAttachment) => void;
   onSend: (text: string, mentions?: ComposerMention[]) => Promise<void>;
   onStop: () => Promise<void>;
+  /** The bot's guess at the reply to its question, offered while the box is empty. */
+  suggestedReply?: string;
   onVoice?: () => void;
   replyTarget?: ThreadMessage | null;
   replyQuote?: string | null;
@@ -5324,7 +5334,8 @@ const Composer = memo(function Composer({
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [draft]);
+    // A suggestion shows as the placeholder, which also sets the height.
+  }, [draft, suggestedReply, running]);
 
   function updateDraft(value: string) {
     setDraft(value);
@@ -5499,6 +5510,17 @@ const Composer = memo(function Composer({
 
   const showComposerPlaceholder =
     draft.length === 0 && selectedSkill === null && selectedMentions.length === 0;
+  const suggestion = showComposerPlaceholder && !running && !disabled ? suggestedReply : undefined;
+
+  function acceptSuggestion() {
+    if (!suggestion) return;
+    updateDraft(suggestion);
+    window.requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      textarea?.focus();
+      textarea?.setSelectionRange(suggestion.length, suggestion.length);
+    });
+  }
   const replyName = replyTarget ? (replyTargetName ?? previewMessageText(replyTarget)) : "";
   const replyNameRef = useRef(replyName);
   replyNameRef.current = replyName;
@@ -5801,6 +5823,15 @@ const Composer = memo(function Composer({
             onPaste={handlePaste}
             onKeyDown={(event) => {
               if (
+                suggestion &&
+                (event.key === "ArrowRight" || (event.key === "Tab" && !event.shiftKey)) &&
+                !event.nativeEvent.isComposing
+              ) {
+                event.preventDefault();
+                acceptSuggestion();
+                return;
+              }
+              if (
                 event.key === "Backspace" &&
                 draft.length === 0 &&
                 (selectedSkill !== null || selectedMentions.length > 0)
@@ -5842,9 +5873,7 @@ const Composer = memo(function Composer({
             disabled={disabled}
             placeholder={
               showComposerPlaceholder
-                ? activeName
-                  ? t`Message ${activeName}`
-                  : t`Message…`
+                ? (suggestion ?? (activeName ? t`Message ${activeName}` : t`Message…`))
                 : undefined
             }
             aria-label={activeName ? t`Message ${activeName}` : t`Message`}
@@ -5861,6 +5890,19 @@ const Composer = memo(function Composer({
             className="max-h-32 min-h-[24px] min-w-[8rem] flex-1 resize-none overflow-y-auto bg-transparent py-0.5 text-[15.5px] leading-6 text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-40"
           />
         </div>
+        {suggestion ? (
+          // Touch screens have no Right Arrow or Tab to take the suggestion.
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t`Use suggested reply`}
+            title={t`Use suggested reply`}
+            onClick={acceptSuggestion}
+            className="hidden size-8 shrink-0 rounded-full text-foreground/75 pointer-coarse:inline-flex"
+          >
+            <ArrowRight size={16} strokeWidth={1.8} />
+          </Button>
+        ) : null}
         {onVoice && draft.trim().length === 0 ? (
           <Button
             variant="outline"
