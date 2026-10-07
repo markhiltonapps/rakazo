@@ -14,6 +14,7 @@ import {
   runPromotesMidTurnNarration,
   runReplyGuidance,
   runSendsFinishNotification,
+  SUGGESTED_REPLY_GUIDANCE,
   stripNoResponseReply,
   subagentMarksUnread,
 } from "./executor.js";
@@ -276,6 +277,12 @@ describe("runReplyGuidance", () => {
     expect(runReplyGuidance("user")).toBe(LONG_WORK_PROGRESS_GUIDANCE);
     expect(runReplyGuidance("user")).toContain("message_user");
     expect(runReplyGuidance("messaging")).toBe(LONG_WORK_PROGRESS_GUIDANCE);
+  });
+
+  it("asks for a suggested reply only when the run offers suggest_reply", () => {
+    expect(runReplyGuidance("user", true)).toContain(SUGGESTED_REPLY_GUIDANCE);
+    expect(runReplyGuidance("user", true)).toContain("message_user");
+    expect(runReplyGuidance("user")).not.toContain("suggest_reply");
   });
 });
 

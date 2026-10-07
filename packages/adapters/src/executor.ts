@@ -4145,7 +4145,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 pluginLine,
                 agentSkillsLine,
                 taughtSkillsLine,
-                replyGuidance: runReplyGuidance(run.trigger),
+                replyGuidance: runReplyGuidance(
+                  run.trigger,
+                  tools.some((tool) => tool.name === "suggest_reply"),
+                ),
               })
                 .filter((instruction): instruction is string => Boolean(instruction))
                 .join("\n\n"),
@@ -4663,6 +4666,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   ? undefined
                   : suggestedReply,
               );
+          if (blocks.some((block) => block.kind === "text" && block.suggestedReply)) {
+            getLogger().info("run.suggested_reply");
+          }
           const text = handedOff
             ? ""
             : redactSecrets(completionNotificationBody(silentReply.assembled, blocks), runSecrets);
@@ -5173,10 +5179,14 @@ export function runPromotesMidTurnNarration(trigger: string): boolean {
   return trigger !== "routine";
 }
 
-export function runReplyGuidance(trigger: string): string {
-  return runAllowsSilentEmpty(trigger)
+export const SUGGESTED_REPLY_GUIDANCE =
+  "Whenever your reply asks the user anything they will answer in their own words, call suggest_reply in the same message, after the reply, with the answer they would most likely send: short, in their voice, and covering every question you asked. Skip it only when the reply asks nothing or ask_user fits better.";
+
+export function runReplyGuidance(trigger: string, offersSuggestedReply = false): string {
+  const guidance = runAllowsSilentEmpty(trigger)
     ? ROUTINE_SILENT_REPLY_GUIDANCE
     : LONG_WORK_PROGRESS_GUIDANCE;
+  return offersSuggestedReply ? `${guidance}\n\n${SUGGESTED_REPLY_GUIDANCE}` : guidance;
 }
 
 export function completionMessageSegments(
