@@ -785,8 +785,9 @@ export function composioCallShape(call: ConnectorCall): string {
   if (!Array.isArray(items)) return `${call.tool}(${keys(call.args)})`;
   return items
     .map((item) => {
-      const { tool_slug: slug, arguments: args } = (item ?? {}) as Record<string, unknown>;
-      return `${typeof slug === "string" ? slug : "?"}(${keys(args)})`;
+      const { tool_slug: slug, arguments: args, ...rest } = (item ?? {}) as Record<string, unknown>;
+      const extra = Object.keys(rest).length > 0 ? `+{${keys(rest)}}` : "";
+      return `${typeof slug === "string" ? slug : "?"}(${keys(args)})${extra}`;
     })
     .join(" ");
 }

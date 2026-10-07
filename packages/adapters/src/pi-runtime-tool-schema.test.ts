@@ -250,7 +250,11 @@ describe("jsonSchemaParameters", () => {
                 type: "object",
                 properties: {
                   tool_slug: { type: "string" },
-                  arguments: { type: "object", additionalProperties: true },
+                  arguments: {
+                    type: "object",
+                    additionalProperties: true,
+                    examples: [{ to: "test@example.test", subject: "Hello" }],
+                  },
                 },
                 required: ["tool_slug", "arguments"],
               },
@@ -262,11 +266,13 @@ describe("jsonSchemaParameters", () => {
         }),
       ),
     );
-    expect(wire.properties.tools.items.properties.arguments).toMatchObject({
+    // No `properties: {}`: an object listing no fields reads as one that takes none.
+    expect(wire.properties.tools.items.properties.arguments).toEqual({
       type: "object",
       additionalProperties: true,
+      examples: [{ to: "test@example.test", subject: "Hello" }],
     });
-    expect(wire.properties.options).toMatchObject({
+    expect(wire.properties.options).toEqual({
       type: "object",
       additionalProperties: true,
       description: "Any options",
