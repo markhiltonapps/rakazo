@@ -381,6 +381,7 @@ export class ComposioConnector implements ComposioProvider {
         context.userId,
         connectedComposioConnections(context),
       );
+      getLogger().info("composio.execute", { "tool.calls": composioCallShape(call) });
       const result = await session.execute(call.tool, call.args ?? {});
       if (result.error) {
         yield { type: "error", message: sanitizeComposioError(result.error) };
@@ -772,6 +773,22 @@ export function isNoAuthToolkitError(error: unknown): boolean {
 export function sanitizeComposioError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return redactConnectorText(message);
+}
+
+/** Tool slugs and argument names only, never values, so a support log shows what was sent. */
+export function composioCallShape(call: ConnectorCall): string {
+  const keys = (value: unknown) =>
+    value && typeof value === "object" && !Array.isArray(value)
+      ? Object.keys(value).sort().join(",")
+      : typeof value;
+  const items = (call.args as { tools?: unknown } | undefined)?.tools;
+  if (!Array.isArray(items)) return `${call.tool}(${keys(call.args)})`;
+  return items
+    .map((item) => {
+      const { tool_slug: slug, arguments: args } = (item ?? {}) as Record<string, unknown>;
+      return `${typeof slug === "string" ? slug : "?"}(${keys(args)})`;
+    })
+    .join(" ");
 }
 
 function sanitizePayload(data: unknown): unknown {
