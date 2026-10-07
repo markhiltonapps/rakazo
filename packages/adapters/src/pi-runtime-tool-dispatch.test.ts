@@ -11,7 +11,9 @@ const fakeAgentState = vi.hoisted(() => ({
     | "parent-limit"
     | "parent-parallel"
     | "ask-pause"
-    | "nested-ask-pause",
+    | "nested-ask-pause"
+    | "suggest-final",
+  suggestAfterToolWork: false,
   emitFinalAfterFollowUp: true,
   abortCount: 0,
   tools: [] as Array<{
@@ -78,6 +80,47 @@ vi.mock("@earendil-works/pi-agent-core", () => ({
         const args = target.prepareArguments?.(rawArgs) ?? rawArgs;
         this.emit({ type: "tool_execution_start", toolName: target.name, args });
         fakeAgentState.toolResult = await target.execute("call-1", args);
+        return;
+      }
+
+      if (fakeAgentState.mode === "suggest-final") {
+        if (fakeAgentState.suggestAfterToolWork) {
+          const destination = this.tools.find((tool) => tool.name === "destination_write");
+          if (!destination) throw new Error("destination_write was not exposed");
+          const args = { collection: "notes", title: "Agenda", body: "Draft" };
+          this.emit({ type: "tool_execution_start", toolName: destination.name, args });
+          await destination.execute("work-1", args);
+          this.emit({
+            type: "turn_end",
+            message: {
+              role: "assistant",
+              content: [
+                { type: "toolCall", id: "work-1", name: destination.name, arguments: args },
+              ],
+            },
+            toolResults: [{ toolCallId: "work-1", result: { ok: true } }],
+          });
+        }
+        const suggest = this.tools.find((tool) => tool.name === "suggest_reply");
+        if (!suggest) throw new Error("suggest_reply was not exposed");
+        const question = "Which day works best for the review?";
+        const args = { reply: "Thursday afternoon works for me." };
+        this.emit({
+          type: "message_update",
+          assistantMessageEvent: { type: "text_delta", delta: question },
+        });
+        const content = [
+          { type: "text", text: question },
+          { type: "toolCall", id: "suggest-1", name: suggest.name, arguments: args },
+        ];
+        this.emit({ type: "message_end", message: { role: "assistant", content } });
+        this.emit({ type: "tool_execution_start", toolName: suggest.name, args });
+        const result = await suggest.execute("suggest-1", args);
+        this.emit({
+          type: "turn_end",
+          message: { role: "assistant", content },
+          toolResults: [{ toolCallId: "suggest-1", result }],
+        });
         return;
       }
 
@@ -295,6 +338,7 @@ const previousMaxToolCalls = process.env.MAX_TOOL_CALLS_PER_TURN;
 describe("Pi connector tool dispatch", () => {
   beforeEach(() => {
     fakeAgentState.mode = "dispatch";
+    fakeAgentState.suggestAfterToolWork = false;
     fakeAgentState.abortCount = 0;
     fakeAgentState.tools = [];
     fakeAgentState.preparedMessages = [];
@@ -1411,6 +1455,58 @@ describe("Pi connector tool dispatch", () => {
     expect(events).not.toContainEqual(expect.objectContaining({ type: "tool" }));
     expect(fakeAgentState.toolResult).toMatchObject({ terminate: true });
   });
+
+  for (const afterToolWork of [false, true]) {
+    it(`keeps the question as the final reply when it ends with a suggestion${afterToolWork ? " after tool work" : ""}`, async () => {
+      fakeAgentState.mode = "suggest-final";
+      fakeAgentState.suggestAfterToolWork = afterToolWork;
+      const runtime = new PiAgentRuntime();
+      const events: Array<{ type: string; text?: string; activity?: boolean }> = [];
+      for await (const event of runtime.run(
+        {
+          botId: "b",
+          threadId: "t",
+          runId: `suggest-final-${afterToolWork}`,
+          prompt: "plan the review",
+          instructions: "Ask which day works.",
+          history: [],
+          tools: [
+            destinationTool,
+            {
+              name: "suggest_reply",
+              description: "Suggest the user's reply",
+              inputSchema: { type: "object", properties: { reply: { type: "string" } } },
+            },
+          ],
+          model: { provider: "test", id: "dispatch-test-model" },
+          executeTool: vi.fn(async () => ({ ok: true })),
+        },
+        {
+          operationId: "sf",
+          traceId: "sf",
+          spaceId: "w",
+          userId: "u",
+          signal: new AbortController().signal,
+        },
+      )) {
+        events.push(event as never);
+      }
+
+      const suggestion = events.findIndex((event) => event.type === "suggested_reply");
+      expect(suggestion).toBeGreaterThan(-1);
+      // Nothing the user would read follows the suggestion, so it stays attached.
+      expect(
+        events.slice(suggestion + 1).filter((event) => event.type === "text" && event.text?.trim()),
+      ).toEqual([]);
+      expect(events.at(-1)).toEqual({
+        type: "done",
+        text: "Which day works best for the review?",
+      });
+      expect(events).not.toContainEqual(
+        expect.objectContaining({ type: "progress", text: expect.stringContaining("suggest") }),
+      );
+    });
+  }
 
   it("clips structured tool results to one aggregate text budget", async () => {
     const first = "a".repeat(TOOL_RESULT_TEXT_LIMIT - 5);

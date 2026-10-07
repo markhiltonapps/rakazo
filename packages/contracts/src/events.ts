@@ -93,7 +93,7 @@ export const SecretAskPurpose = z.enum(["otp", "password", "api_key"]);
 export type SecretAskPurpose = z.infer<typeof SecretAskPurpose>;
 
 /** Longest reply a bot may suggest for the person to send back. */
-export const SUGGESTED_REPLY_MAX_LENGTH = 200;
+export const SUGGESTED_REPLY_MAX_LENGTH = 400;
 
 export const MessageBlock = z.discriminatedUnion("kind", [
   z.object({

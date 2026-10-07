@@ -341,8 +341,17 @@ export class PiAgentRuntime implements AgentRuntime {
           if (event.type === "message_end") {
             await piSession?.appendMessage(event.message);
           }
+          if (
+            event.type === "tool_execution_end" &&
+            event.toolName === "suggest_reply" &&
+            event.isError
+          ) {
+            getLogger().warn("suggest_reply rejected", { runId: request.runId });
+          }
           if (event.type === "tool_execution_start") {
             if (host.toolCallBudget.exceeded) return;
+            // A suggested reply annotates the reply just written; it is not work to show.
+            if (event.toolName === "suggest_reply") return;
             toolCalls += 1;
             // Live activity feedback: without this the thread shows a bare
             // "working…" for the whole tool call with nothing actionable.
@@ -375,10 +384,23 @@ export class PiAgentRuntime implements AgentRuntime {
               event.message.role === "assistant" &&
               event.message.content.some((part) => part.type === "toolCall");
             const hasToolResults = event.toolResults.length > 0;
+            const suggestionOnly =
+              event.message.role === "assistant" &&
+              hasToolCalls &&
+              event.message.content.every(
+                (part) => part.type !== "toolCall" || part.name === "suggest_reply",
+              );
 
-            // Text in a turn that also contains a tool call is narration, not a final
-            // response. Keep the run alive until a later text-only turn answers the user.
-            if (hasToolCalls && hasToolResults && !host.pausePending) {
+            // A reply that ends by suggesting the user's answer is the final response:
+            // suggest_reply only annotates it and ends the run.
+            if (suggestionOnly) {
+              if (messageText.trim()) {
+                toolWorkPendingFinal = false;
+                silentToolContinuations = 0;
+              }
+            } else if (hasToolCalls && hasToolResults && !host.pausePending) {
+              // Text in a turn that also contains a tool call is narration, not a final
+              // response. Keep the run alive until a later text-only turn answers the user.
               toolWorkPendingFinal = true;
               silentToolContinuations = 0;
             } else if (toolWorkPendingFinal && !hasToolCalls && !hasToolResults) {
