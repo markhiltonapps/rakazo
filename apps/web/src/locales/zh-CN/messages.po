@@ -3899,6 +3899,7 @@ msgid "To:"
 msgstr "至:"
 
 #: src/pages/Artifacts.tsx
+#: src/pages/shell/bot-usage.tsx
 msgid "Today"
 msgstr ""
 
@@ -4195,10 +4196,6 @@ msgstr ""
 msgid "Input $ per 1M tokens"
 msgstr ""
 
-#: src/pages/shell/bot-usage.tsx
-msgid "Last 7 days"
-msgstr ""
-
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Output $ per 1M tokens"
 msgstr ""
@@ -4217,4 +4214,16 @@ msgstr ""
 
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Remove from gallery"
+msgstr ""
+
+#: src/pages/shell/bot-usage.tsx
+msgid "Month"
+msgstr ""
+
+#: src/pages/shell/bot-usage.tsx
+msgid "Week"
+msgstr ""
+
+#: src/pages/shell/bot-usage.tsx
+msgid "{tokens} tokens"
 msgstr ""

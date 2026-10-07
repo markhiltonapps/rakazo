@@ -29,7 +29,6 @@ import {
   BotMcpServerSchema,
   BotSchema,
   BotSectionSchema,
-  BotUsageSchema,
   CapabilityInstallSchema,
   ComputerModeSchema,
   ComputerReleaseReasonSchema,
@@ -83,6 +82,8 @@ import {
   UpdateBotInput,
   UpdateExternalConversationPolicyInput,
   UpdateGroupInput,
+  UsageOverviewInputSchema,
+  UsageOverviewSchema,
   UsageRecordSchema,
   VoiceCatalogEntrySchema,
   VoiceCredentialSchema,
@@ -818,7 +819,7 @@ export const appContract = {
   },
   usage: {
     list: oc.output(z.array(UsageRecordSchema)),
-    byBot: oc.output(z.array(BotUsageSchema)),
+    overview: oc.input(UsageOverviewInputSchema).output(UsageOverviewSchema),
     summary: oc.output(
       z.object({
         inputTokens: z.number(),
