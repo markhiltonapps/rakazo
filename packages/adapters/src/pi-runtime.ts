@@ -1588,9 +1588,20 @@ export function jsonSchemaParameters(
   // Preserve closed objects (e.g. request_secret destination oneOf branches).
   // Type.Object defaults to open, which would let connectionId+replace match both
   // anyOf variants after conversion.
-  return schema.additionalProperties === false
-    ? Type.Object(fields, { ...options, additionalProperties: false })
-    : Type.Object(fields, options);
+  if (schema.additionalProperties === false) {
+    return Type.Object(fields, { ...options, additionalProperties: false });
+  }
+  // A free-form object (no declared fields, or extra keys allowed) must say so. Rebuilt as
+  // `properties: {}` alone, it reads as an object with no fields, and models send `{}`,
+  // e.g. for the `arguments` of Composio's execute tool.
+  const additional = schema.additionalProperties;
+  if (additional && typeof additional === "object") {
+    return Type.Object(fields, { ...options, additionalProperties: jsonField(additional) });
+  }
+  if (additional === true || schema.properties == null) {
+    return Type.Object(fields, { ...options, additionalProperties: true });
+  }
+  return Type.Object(fields, options);
 }
 
 type FieldOptions = { description?: string };

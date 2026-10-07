@@ -237,6 +237,43 @@ describe("jsonSchemaParameters", () => {
     ).not.toThrow();
   });
 
+  it("keeps free-form object fields open so models can fill them", () => {
+    const wire = JSON.parse(
+      JSON.stringify(
+        jsonSchemaParameters({
+          type: "object",
+          properties: {
+            tools: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  tool_slug: { type: "string" },
+                  arguments: { type: "object", additionalProperties: true },
+                },
+                required: ["tool_slug", "arguments"],
+              },
+            },
+            options: { type: "object", description: "Any options" },
+            headers: { type: "object", additionalProperties: { type: "string" } },
+            filter: { type: "object", properties: { folder: { type: "string" } } },
+          },
+        }),
+      ),
+    );
+    expect(wire.properties.tools.items.properties.arguments).toMatchObject({
+      type: "object",
+      additionalProperties: true,
+    });
+    expect(wire.properties.options).toMatchObject({
+      type: "object",
+      additionalProperties: true,
+      description: "Any options",
+    });
+    expect(wire.properties.headers.additionalProperties).toEqual({ type: "string" });
+    expect(wire.properties.filter).not.toHaveProperty("additionalProperties");
+  });
+
   it("accepts enums whose members are objects or arrays", () => {
     expect(() =>
       jsonSchemaParameters({
