@@ -104,24 +104,20 @@ test("the shared avatar gallery offers its avatars and takes new ones", async ({
   const gallery = studio.getByTestId("avatar-gallery");
   await gallery.getByRole("button", { name: "Gallery avatar 1", exact: true }).click();
   await expect(trigger.locator("img")).toHaveAttribute("src", GALLERY_AVATAR);
-  await expect(gallery.getByRole("button", { name: "Add this avatar to the gallery" })).toHaveCount(
-    0,
-  );
 
-  await studio.getByRole("button", { name: "Upload", exact: true }).click();
-  await studio.locator('input[type="file"]').setInputFiles({
+  // The owner adds a new image straight from a file; the bot keeps its avatar.
+  await expect(gallery.getByRole("button", { name: "Add an image to the gallery" })).toBeVisible();
+  await gallery.getByTestId("avatar-gallery-file").setInputFiles({
     name: "wave.gif",
     mimeType: "image/gif",
     buffer: ANIMATED_GIF,
   });
-  await expect(studio).toBeHidden();
-  await trigger.click();
-  await studio.getByRole("button", { name: "Bot", exact: true }).click();
-  await gallery.getByRole("button", { name: "Add this avatar to the gallery" }).click();
-  await expect(
-    gallery.getByRole("button", { name: "Gallery avatar 2", exact: true }),
-  ).toHaveAttribute("aria-pressed", "true");
+  const added = gallery.getByRole("button", { name: "Gallery avatar 2", exact: true });
+  await expect(added).toHaveAttribute("aria-pressed", "false");
+  await expect(added.locator("img")).toHaveAttribute("src", /^data:image\/webp;base64,/);
+  await expect(trigger.locator("img")).toHaveAttribute("src", GALLERY_AVATAR);
   await expect(gallery.getByRole("button", { name: "Remove from gallery" })).toHaveCount(2);
+  await expect(gallery.getByRole("button", { name: "Add an image to the gallery" })).toBeVisible();
 
   await captureScreenshot(page, testInfo, "avatar-studio-gallery");
 });
