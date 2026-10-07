@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { builtinAgentTools } from "./builtin-tools.js";
 import { parseConnectorToolArgs } from "./lazy-tool-catalog.js";
+import { inlineLocalSchemaRefs } from "./openai-tool-parameters.js";
 import { jsonSchemaParameters, parametersFor } from "./pi-runtime.js";
 
 describe("jsonSchemaParameters", () => {
@@ -272,6 +273,109 @@ describe("jsonSchemaParameters", () => {
     });
     expect(wire.properties.headers.additionalProperties).toEqual({ type: "string" });
     expect(wire.properties.filter).not.toHaveProperty("additionalProperties");
+  });
+
+  it("follows nested local references instead of advertising strings", () => {
+    const tool = {
+      name: "COMPOSIO_MULTI_EXECUTE_TOOL",
+      description: "Run several tools",
+      inputSchema: {
+        type: "object",
+        $defs: {
+          ToolItem: {
+            type: "object",
+            properties: {
+              tool_slug: { type: "string" },
+              arguments: { type: "object", additionalProperties: true },
+            },
+            required: ["tool_slug", "arguments"],
+          },
+          Folder: { type: "string", enum: ["INBOX", "SENT"] },
+        },
+        properties: {
+          tools: { type: "array", items: { $ref: "#/$defs/ToolItem" } },
+          folder: { $ref: "#/$defs/Folder", description: "Where to look" },
+        },
+        required: ["tools"],
+      },
+    };
+    const original = JSON.stringify(tool.inputSchema);
+    const wire = JSON.parse(JSON.stringify(parametersFor(tool)));
+    expect(wire.properties.tools.items).toMatchObject({
+      type: "object",
+      properties: {
+        tool_slug: { type: "string" },
+        arguments: { type: "object", additionalProperties: true },
+      },
+      required: ["tool_slug", "arguments"],
+    });
+    expect(wire.properties.folder).toEqual({
+      type: "string",
+      enum: ["INBOX", "SENT"],
+      description: "Where to look",
+    });
+    expect(JSON.stringify(wire)).not.toContain("#/");
+    expect(wire).not.toHaveProperty("$defs");
+    const args = { tools: [{ tool_slug: "GMAIL_FETCH_EMAILS", arguments: { label: "SENT" } }] };
+    expect(parseConnectorToolArgs(tool.inputSchema, args)).toEqual(args);
+    expect(JSON.stringify(tool.inputSchema)).toBe(original);
+  });
+
+  it("stops at reference cycles and unresolved references", () => {
+    const wire = JSON.parse(
+      JSON.stringify(
+        parametersFor({
+          name: "tree",
+          description: "Walk a tree",
+          inputSchema: {
+            type: "object",
+            $defs: {
+              Node: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  children: { type: "array", items: { $ref: "#/$defs/Node" } },
+                },
+              },
+            },
+            properties: {
+              root: { $ref: "#/$defs/Node" },
+              other: { $ref: "https://example.test/schema.json" },
+            },
+          },
+        }),
+      ),
+    );
+    expect(wire.properties.root.properties.name).toEqual({ type: "string" });
+    expect(wire.properties.root.properties.children.items).toMatchObject({
+      type: "object",
+      additionalProperties: true,
+    });
+    expect(wire.properties.other).toMatchObject({ type: "object", additionalProperties: true });
+  });
+
+  it("resolves a root reference and fields named like keywords, but not data values", () => {
+    expect(
+      inlineLocalSchemaRefs({
+        $ref: "#/$defs/Args",
+        $defs: {
+          Id: { type: "string" },
+          Args: {
+            type: "object",
+            properties: {
+              id: { $ref: "#/$defs/Id", default: { $ref: "#/$defs/Id" } },
+              default: { $ref: "#/$defs/Id" },
+            },
+          },
+        },
+      }),
+    ).toEqual({
+      type: "object",
+      properties: {
+        id: { type: "string", default: { $ref: "#/$defs/Id" } },
+        default: { type: "string" },
+      },
+    });
   });
 
   it("accepts enums whose members are objects or arrays", () => {

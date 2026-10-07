@@ -36,6 +36,7 @@ import { isToolPauseResult } from "./approval-effect.js";
 import { builtinAgentTools, DELEGATION_TOOL_NAMES } from "./builtin-tools.js";
 import { DEFAULT_OPENROUTER_MODEL_ID } from "./deployment-model.js";
 import {
+  inlineLocalSchemaRefs,
   normalizeOpenAiToolParameters,
   openAiToolParametersNeedNormalization,
 } from "./openai-tool-parameters.js";
@@ -1323,7 +1324,7 @@ function withDeclaredDescriptions<T>(schema: T, declared: unknown): T {
  * degrade to a permissive object instead of failing every turn for the whole bot. */
 function safeJsonSchemaParameters(tool: ConnectorTool) {
   try {
-    return jsonSchemaParameters(tool.inputSchema);
+    return jsonSchemaParameters(inlineLocalSchemaRefs(tool.inputSchema));
   } catch (error) {
     getLogger().error(`unsupported input schema for tool ${tool.name}`, error);
     return Type.Object({});
