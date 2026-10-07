@@ -22,6 +22,57 @@ export function openAiToolParametersNeedNormalization(parameters: unknown): bool
   return !isRecord(parameters.properties);
 }
 
+/**
+ * Replace same-document `$ref`s with the schemas they point to. Converters that read only
+ * `type` and `properties` otherwise see a bare `$ref` and fall back to a string, which is how
+ * the list of calls for Composio's execute tool reached models as a list of strings. A cycle,
+ * a pointer that does not resolve, or a schema past the expansion budget becomes a free-form
+ * object instead.
+ */
+export function inlineLocalSchemaRefs(schema: Record<string, unknown>): Record<string, unknown> {
+  let expansions = 0;
+  const inline = (node: unknown, resolving: ReadonlySet<string>): unknown => {
+    if (Array.isArray(node)) return node.map((item) => inline(item, resolving));
+    if (!isRecord(node)) return node;
+    const { $ref: ref, ...siblings } = node;
+    if (typeof ref === "string") {
+      const target =
+        resolving.has(ref) || expansions >= MAX_REF_EXPANSIONS
+          ? undefined
+          : localSchemaReference(schema, ref);
+      if (!isRecord(target)) {
+        return { type: "object", additionalProperties: true, ...inlineFields(siblings, resolving) };
+      }
+      expansions += 1;
+      return inline({ ...target, ...siblings }, new Set([...resolving, ref]));
+    }
+    return inlineFields(node, resolving);
+  };
+  const inlineFields = (node: Record<string, unknown>, resolving: ReadonlySet<string>) =>
+    Object.fromEntries(
+      Object.entries(node).map(([key, value]) => [
+        key,
+        SCHEMA_DATA_KEYS.has(key)
+          ? value
+          : SCHEMA_MAP_KEYS.has(key) && isRecord(value)
+            ? Object.fromEntries(
+                Object.entries(value).map(([name, spec]) => [name, inline(spec, resolving)]),
+              )
+            : inline(value, resolving),
+      ]),
+    );
+  const { $defs: _defs, definitions: _definitions, ...rest } = schema;
+  return inline(rest, new Set()) as Record<string, unknown>;
+}
+
+const MAX_REF_EXPANSIONS = 256;
+
+/** Keywords whose values are data, not schemas, so a `$ref` key inside them is left alone. */
+const SCHEMA_DATA_KEYS = new Set(["const", "default", "enum", "examples"]);
+
+/** Keywords that map names to schemas, so a field may be called `default` or `enum`. */
+const SCHEMA_MAP_KEYS = new Set(["properties", "patternProperties", "dependentSchemas"]);
+
 const ROOT_UNION_KEYS = ["oneOf", "anyOf", "allOf"] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
