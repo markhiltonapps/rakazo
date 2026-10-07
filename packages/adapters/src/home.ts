@@ -15,6 +15,9 @@ import path from "node:path";
 import type { AdapterContext, AgentHomeStore, PortableFile } from "@rakazo/adapter-kit";
 import { fileHandlePath } from "./file-handle-path.js";
 
+/** A commit's staging copy older than this was cut off by a crash or redeploy. */
+const ABANDONED_STAGING_MS = 60 * 60 * 1000;
+
 export class LocalAgentHomeStore implements AgentHomeStore {
   private readonly botWrites = new Map<string, Promise<void>>();
 
@@ -179,7 +182,33 @@ export class LocalAgentHomeStore implements AgentHomeStore {
   private async recoverInterruptedCommit(botId: string) {
     const dest = this.botDir(botId);
     const previous = `${dest}.previous`;
-    if (!(await pathExists(dest)) && (await pathExists(previous))) await rename(previous, dest);
+    if (!(await pathExists(dest))) {
+      if (await pathExists(previous)) await rename(previous, dest);
+    } else if (await pathExists(previous)) {
+      // Interrupted after the new home was in place; the old copy is no longer needed.
+      await rm(previous, { recursive: true, force: true });
+    }
+    await this.removeAbandonedStaging(botId);
+  }
+
+  /**
+   * An interrupted commit leaves a full copy of the home behind, and nothing else reclaims
+   * it. Leave recent staging alone: it may belong to a commit still running in another process.
+   */
+  private async removeAbandonedStaging(botId: string) {
+    const parent = path.dirname(this.botDir(botId));
+    const prefix = `.${botId}.staging-`;
+    const names = await readdir(parent).catch(() => [] as string[]);
+    const cutoff = Date.now() - ABANDONED_STAGING_MS;
+    await Promise.all(
+      names
+        .filter((name) => name.startsWith(prefix))
+        .map(async (name) => {
+          const staging = path.join(parent, name);
+          const info = await stat(staging).catch(() => undefined);
+          if (info && info.mtimeMs < cutoff) await rm(staging, { recursive: true, force: true });
+        }),
+    );
   }
 
   private async withBotWrite<T>(botId: string, work: () => Promise<T>): Promise<T> {

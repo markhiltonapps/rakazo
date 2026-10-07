@@ -1,4 +1,15 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -147,5 +158,33 @@ describe("LocalAgentHomeStore path containment", () => {
     }
     await store.commit("bot-2", dest, context);
     expect(await readFile(path.join(store.pathFor("bot-2"), "nested/run"))).toEqual(bytes);
+  });
+});
+
+describe("LocalAgentHomeStore interrupted commits", () => {
+  it("reclaims staging copies and old homes that an interrupted commit left behind", async () => {
+    const { root, store, home } = await fixture();
+    await writeFile(path.join(home, "kept.txt"), "home");
+    const homes = path.dirname(home);
+    const abandoned = path.join(homes, ".bot-1.staging-abandoned");
+    const running = path.join(homes, ".bot-1.staging-running");
+    const otherBot = path.join(homes, ".bot-2.staging-abandoned");
+    for (const dir of [abandoned, running, otherBot, `${home}.previous`]) {
+      await mkdir(dir, { recursive: true });
+      await writeFile(path.join(dir, "copy.bin"), "x".repeat(1024));
+    }
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    await utimes(abandoned, twoHoursAgo, twoHoursAgo);
+    await utimes(otherBot, twoHoursAgo, twoHoursAgo);
+
+    const source = path.join(root, "source");
+    await mkdir(source, { recursive: true });
+    await writeFile(path.join(source, "kept.txt"), "next");
+    await store.commit("bot-1", source, context);
+
+    expect((await readdir(homes)).sort()).toEqual(
+      [".bot-1.staging-running", ".bot-2.staging-abandoned", "bot-1"].sort(),
+    );
+    await expect(readFile(path.join(home, "kept.txt"), "utf8")).resolves.toBe("next");
   });
 });

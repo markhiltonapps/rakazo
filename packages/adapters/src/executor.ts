@@ -383,6 +383,17 @@ const BUILTIN_AGENT_TOOL_NAMES = new Set(builtinAgentTools.map((tool) => tool.na
 /** Avoid an expensive remote workspace export when a turn never touched the computer. */
 export function createRunWorkspaceCheckpoint(checkpoint: () => Promise<unknown>) {
   let dirty = false;
+  const flush = async () => {
+    if (!dirty) return false;
+    dirty = false;
+    try {
+      await checkpoint();
+      return true;
+    } catch (error) {
+      dirty = true;
+      throw error;
+    }
+  };
   return {
     markDirty() {
       dirty = true;
@@ -390,15 +401,17 @@ export function createRunWorkspaceCheckpoint(checkpoint: () => Promise<unknown>)
     markFiles(files: readonly unknown[]) {
       if (files.length > 0) dirty = true;
     },
-    async flush() {
-      if (!dirty) return false;
-      dirty = false;
+    flush,
+    /**
+     * Flush, but log a failed save instead of throwing. The save is a backup of a computer
+     * that keeps its own files, so it must not fail the run; it stays dirty for the next flush.
+     */
+    async flushOrLog() {
       try {
-        await checkpoint();
-        return true;
+        return await flush();
       } catch (error) {
-        dirty = true;
-        throw error;
+        getLogger().error("workspace checkpoint failed", error);
+        return false;
       }
     },
   };
@@ -1598,7 +1611,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               )
             : [];
         } catch (error) {
-          await workspaceCheckpoint.flush().catch(() => undefined);
+          await workspaceCheckpoint.flushOrLog();
           throw error;
         }
         const attachedFilesPrompt = currentTurnFilesInstruction(currentTurnFiles);
@@ -2324,7 +2337,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               // Another worker owns the run now; exit without leaving a local pause card.
               return pauseForApproval();
             }
-            await workspaceCheckpoint.flush();
+            await workspaceCheckpoint.flushOrLog();
             const paused = await deps.events.pauseRunForInput({
               spaceId: run.spaceId,
               threadId: run.threadId,
@@ -3610,7 +3623,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             if (!(await renewRunLease(deps, runId, workerId, fence))) {
               return pauseForSecret();
             }
-            await workspaceCheckpoint.flush();
+            await workspaceCheckpoint.flushOrLog();
             const paused = await deps.events.pauseRunForInput({
               spaceId: run.spaceId,
               threadId: run.threadId,
@@ -4310,7 +4323,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 id: action.id,
                 label: redactSecrets(action.label, runSecrets),
               }));
-              await workspaceCheckpoint.flush();
+              await workspaceCheckpoint.flushOrLog();
               const paused = await deps.events.pauseRunForInput({
                 spaceId: run.spaceId,
                 threadId: run.threadId,
@@ -4369,7 +4382,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               await publishMessage(deps, run, "bot", [
                 { kind: "computer", state: "Needs you", text: safeReason },
               ]);
-              await workspaceCheckpoint.flush();
+              await workspaceCheckpoint.flushOrLog();
               if (!(await holdComputerExecutionLeaseForTakeover(deps.prisma, computerLease))) {
                 throw new Error("Computer lease expired before takeover");
               }
@@ -4422,7 +4435,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 if (messageSegments.length > 0) {
                   await publishMessage(deps, run, "bot", redactBlocks(messageSegments, runSecrets));
                 }
-                await workspaceCheckpoint.flush();
+                await workspaceCheckpoint.flushOrLog();
                 terminalCheckpointComplete = true;
                 const stuckText = `I got stuck calling ${humanizeToolName(event.name)} with the same input ${toolCallStreak.count} times in a row without making progress, so I stopped early. Try rephrasing this, or ask me to try a different approach.`;
                 const stopped = await deps.events.finalizeRun({
@@ -4607,7 +4620,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
           }
 
-          await workspaceCheckpoint.flush();
+          await workspaceCheckpoint.flushOrLog();
           terminalCheckpointComplete = true;
 
           flushPendingTools();
@@ -4719,7 +4732,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
         } catch (error) {
           if (!terminalCheckpointComplete) {
-            await workspaceCheckpoint.flush().catch(() => undefined);
+            await workspaceCheckpoint.flushOrLog();
           }
           const message = redactSecrets(
             error instanceof Error ? error.message : String(error),

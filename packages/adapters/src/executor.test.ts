@@ -261,6 +261,19 @@ describe("run workspace checkpoint", () => {
     await expect(checkpoint.flush()).resolves.toBe(true);
     expect(persist).toHaveBeenCalledTimes(2);
   });
+
+  it("logs a failed save instead of failing the run, and retries it next time", async () => {
+    const persist = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Error("ENOSPC: no space left on device, write"))
+      .mockResolvedValueOnce(undefined);
+    const checkpoint = createRunWorkspaceCheckpoint(persist);
+    checkpoint.markDirty();
+
+    await expect(checkpoint.flushOrLog()).resolves.toBe(false);
+    await expect(checkpoint.flushOrLog()).resolves.toBe(true);
+    expect(persist).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("run tool selection", () => {
