@@ -346,7 +346,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "suggest_reply",
     description:
-      "When your reply ends with a question the user will answer in their own words, call this in the same message, after the question, with the reply they would most likely send. It is shown in their message box to accept or ignore, and it ends your turn. Write it as the user, briefly. Skip it when there is no question or when ask_user fits.",
+      "Whenever your reply asks the user anything they will answer in their own words, call this in the same message, after the reply, with the answer they would most likely send. It is shown in their message box to accept or ignore, and it ends your turn. Write it as the user, briefly, covering every question you asked. Skip it only when the reply asks nothing or ask_user fits.",
     inputSchema: {
       type: "object",
       properties: {
