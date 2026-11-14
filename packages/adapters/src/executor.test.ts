@@ -1124,6 +1124,11 @@ describe("dockerComputerToolInstruction", () => {
   });
 });
 
+/** A routine with no earlier firing still queued or in flight. */
+function noEarlierRoutineRuns() {
+  return { findMany: vi.fn(async () => []), findFirst: vi.fn(async () => null) };
+}
+
 describe("createRunExecutor", () => {
   it("excludes private summaries and memory tools from group messaging runs", () => {
     const messages = [{ role: "user", content: "Group request" }];
@@ -1235,7 +1240,7 @@ describe("createRunExecutor", () => {
         callback({
           routine: { updateMany },
           task: { create: taskCreate },
-          run: { create: runCreate },
+          run: { ...noEarlierRoutineRuns(), create: runCreate },
         }),
       ),
     } as unknown as PrismaClient;
@@ -1350,7 +1355,7 @@ describe("createRunExecutor", () => {
         callback({
           routine: { updateMany: vi.fn(async () => ({ count: 1 })) },
           task: { create: taskCreate },
-          run: { create: runCreate },
+          run: { ...noEarlierRoutineRuns(), create: runCreate },
         }),
       ),
     } as unknown as PrismaClient;
@@ -1415,7 +1420,7 @@ describe("createRunExecutor", () => {
         callback({
           routine: { updateMany: vi.fn(async () => ({ count: 1 })) },
           task: { create: taskCreate },
-          run: { create: runCreate },
+          run: { ...noEarlierRoutineRuns(), create: runCreate },
         }),
       ),
     } as unknown as PrismaClient;
@@ -1497,7 +1502,7 @@ description: Prepare standup notes
         callback({
           routine: { updateMany: vi.fn(async () => ({ count: 1 })) },
           task: { create: taskCreate },
-          run: { create: vi.fn(async () => ({ id: "run-1" })) },
+          run: { ...noEarlierRoutineRuns(), create: vi.fn(async () => ({ id: "run-1" })) },
         }),
       ),
     } as unknown as PrismaClient;
@@ -1550,7 +1555,10 @@ description: Prepare standup notes
         callback({
           routine: { updateMany },
           task: { create: vi.fn(async () => ({ id: "task-1" })) },
-          run: { create: vi.fn(async () => ({ id: "run-1", taskId: "task-1" })) },
+          run: {
+            ...noEarlierRoutineRuns(),
+            create: vi.fn(async () => ({ id: "run-1", taskId: "task-1" })),
+          },
         }),
       ),
     } as unknown as PrismaClient;
@@ -1608,7 +1616,10 @@ description: Prepare standup notes
           return callback({
             routine: { updateMany: claimUpdateMany },
             task: { create: vi.fn(async () => ({ id: "task-1" })) },
-            run: { create: vi.fn(async () => ({ id: "run-1", taskId: "task-1" })) },
+            run: {
+              ...noEarlierRoutineRuns(),
+              create: vi.fn(async () => ({ id: "run-1", taskId: "task-1" })),
+            },
           });
         }
         return callback({

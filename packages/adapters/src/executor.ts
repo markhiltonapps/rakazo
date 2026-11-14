@@ -769,6 +769,55 @@ export async function deferFutureRoutine(
   return true;
 }
 
+/**
+ * Cancels a routine's earlier firings that are still queued and never got past computer setup;
+ * the firing in progress replaces them. Runs that did work or hold a computer lease are kept.
+ */
+export async function cancelSupersededRoutineRuns(
+  tx: Prisma.TransactionClient,
+  routineId: string,
+): Promise<{ count: number; threadSeqs: Map<string, number> } | null> {
+  const queued = await tx.run.findMany({
+    where: { routineId, status: "queued", attempts: { every: { status: "setup_failed" } } },
+    select: { id: true },
+  });
+  if (queued.length === 0) return null;
+  const held = new Set(
+    (
+      await tx.computerExecutionLease.findMany({
+        where: { runId: { in: queued.map((run) => run.id) } },
+        select: { runId: true },
+      })
+    ).map((lease) => lease.runId),
+  );
+  const cancelled = await tx.run.updateManyAndReturn({
+    where: {
+      id: { in: queued.map((run) => run.id).filter((id) => !held.has(id)) },
+      status: "queued",
+    },
+    data: { status: "cancelled", completedAt: new Date() },
+    select: { id: true, spaceId: true, threadId: true, botId: true, taskId: true },
+  });
+  if (cancelled.length === 0) return null;
+  await tx.task.updateMany({
+    where: { id: { in: cancelled.map((run) => run.taskId) } },
+    data: { status: "cancelled" },
+  });
+  const threadSeqs = new Map<string, number>();
+  for (const run of cancelled) {
+    const event = await appendEventInTransaction(tx, {
+      spaceId: run.spaceId,
+      threadId: run.threadId,
+      botId: run.botId,
+      type: "run.cancelled",
+      runId: run.id,
+      payload: {},
+    });
+    threadSeqs.set(run.threadId, event.seq);
+  }
+  return { count: cancelled.length, threadSeqs };
+}
+
 async function loadLivePluginSlugs(
   listConnectedPluginSlugs: ExecutorDeps["listConnectedPluginSlugs"],
   userId: string,
@@ -1080,7 +1129,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         userId: routine.userId,
       });
       const routinePrompt = expandSkillReferencesInPrompt(routine.prompt, skillRecords);
-      const claimed = await deps.prisma.$transaction(async (tx) => {
+      const fired = await deps.prisma.$transaction(async (tx) => {
         const updated = await tx.routine.updateMany({
           where: {
             id: routine.id,
@@ -1095,6 +1144,16 @@ export function createRunExecutor(deps: ExecutorDeps) {
           },
         });
         if (updated.count !== 1) return null;
+        const superseded = await cancelSupersededRoutineRuns(tx, routine.id);
+        // One firing at a time: while an earlier one is still in flight, this one folds into it
+        // instead of queueing behind it, so a bot whose computer is down never builds a backlog.
+        const inFlight = nextRunAt
+          ? await tx.run.findFirst({
+              where: { routineId: routine.id, status: { in: ["queued", "leased", "running"] } },
+              select: { id: true },
+            })
+          : null;
+        if (inFlight) return { run: null, superseded };
         const task = await tx.task.create({
           data: {
             spaceId: routine.spaceId,
@@ -1105,7 +1164,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             status: "queued",
           },
         });
-        return tx.run.create({
+        const run = await tx.run.create({
           data: {
             spaceId: routine.spaceId,
             botId: bot.id,
@@ -1117,8 +1176,26 @@ export function createRunExecutor(deps: ExecutorDeps) {
             routineId: routine.id,
           },
         });
+        return { run, superseded };
       });
-      if (!claimed) return;
+      if (!fired) return;
+      if (fired.superseded) {
+        getLogger().info("routine.runs_superseded", {
+          "routine.id": routine.id,
+          "run.count": fired.superseded.count,
+        });
+        for (const [threadId, eventSeq] of fired.superseded.threadSeqs) {
+          await deps.events.notify(threadId, eventSeq).catch((error: unknown) => {
+            getLogger().error("routine superseded runs notification", error);
+          });
+        }
+      }
+      const claimed = fired.run;
+      if (!claimed) {
+        getLogger().info("routine.firing_folded", { "routine.id": routine.id });
+        if (nextRunAt) await deps.jobs.enqueue(routineWakeupJob(routine.id, nextRunAt));
+        return;
+      }
       // Enqueue continuation first so a thread-signal failure cannot strand the run.
       try {
         await deps.jobs.enqueue(runContinueJob(claimed.id));
